@@ -39,7 +39,18 @@ python -X utf8 scripts/build.py flow.json --check               # 只校验，�
 python -X utf8 scripts/build.py flow.json --prev old.json -o flow.html   # 附上一版做对比
 node scripts/check.mjs flow.html --shot a.png                   # 无头打开：报错、自检、截图
 node scripts/check.mjs flow.html --view fault --sample s1 --beat 3 --shot b.png
+node scripts/check.mjs flow.html --skin report --hash "drill=1" --shot c.png   # 汇报配色 + 演练
 ```
+
+页面能用链接直接打开到某个场景，汇报时很方便：
+
+```
+flow.html?skin=report&drill=1                 # 汇报配色，打开就进演练
+flow.html#skin=report&sample=s2&view=fault    # 汇报配色，故障视图，先演 s2
+<Artifact 链接>#skin.report~drill~speed.0.75  # claude.ai 的 Artifact 链接只能用这种写法
+```
+
+参数全表（`skin` `view` `sample` `drill` `station` `speed` `solo` `inner` `play`）见 `SKILL.md` 第 4 节。
 
 想先看它自己是怎么工作的，构建 `docs/how-it-works.flow.json`：
 
@@ -64,7 +75,7 @@ python -X utf8 scripts/build.py assets/example.flow.json -o example.html
 | `assets/renderer.html` | 渲染器模板：布局、布线、动画、视图、盒中盒、演练、寻路、配色、面板、自检 |
 | `assets/example.flow.json` | 中性完整示例 |
 | `scripts/build.py` | 校验 + 构建 |
-| `scripts/check.mjs` | 无头 Chrome 检查 |
+| `scripts/check.mjs` | 无头 Chrome 检查：参数写错报错、默认 60 秒超时、能截汇报配色和链接场景 |
 | `docs/how-it-works.flow.json` | 本 skill 自己的流程图（用它自己画的）：出图主线 7 站 + 反馈回炉 3 站，「校验构建」带站内小流程 |
 | `tests/` | 回归测试：`python -X utf8 tests/run_tests.py --headless` |
 

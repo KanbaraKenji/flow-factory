@@ -590,6 +590,12 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const NS='http://www.w3.org/2000/svg';
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+/* 链接参数（11-26 用户：汇报时用链接直接打开到「配色 + 场景 + 演练」）。三种写法都认：?skin=report&drill=1　#skin=report&drill=1　#skin.report~drill~sample.s2（Artifact 链接只能用最后这种）。从链接来的设置只管这一次打开，不写进浏览器记忆 */
+const URLP=(()=>{ const o={}, put=(k,v)=>{ if(k) o[String(k).toLowerCase()]=v==null||v===''?'1':String(v); };
+  try{ new URLSearchParams(location.search).forEach((v,k)=>put(k,v)); }catch(e){}
+  let h=''; try{ h=decodeURIComponent(location.hash.slice(1)); }catch(e){ h=location.hash.slice(1); }
+  if(h.includes('=')){ try{ new URLSearchParams(h).forEach((v,k)=>put(k,v)); }catch(e){} } else if(h) h.split('~').forEach(t=>{ const i=t.indexOf('.'); if(i<0) put(t); else put(t.slice(0,i),t.slice(i+1)); });
+  return o; })();
 const store={get(k){try{return JSON.parse(localStorage.getItem('ff:'+k))}catch(e){return null}},set(k,v){try{localStorage.setItem('ff:'+k,JSON.stringify(v))}catch(e){}}};
 const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 const calm=()=>document.documentElement.hasAttribute('data-calm'); let calmWake=()=>{};
@@ -1279,7 +1285,8 @@ function drawToks(){ const c=C(); const g=$('#toks'); if(!c){ g.innerHTML=''; re
   if(inCard||(calm()&&moveTok.on&&moveTok.cur&&performance.now()<moveTok.cur.t0+moveTok.cur.ms)){}
   else if(PIN){ if(!PIN.nocap){ const n=N[PIN.at], txt=s.end?s.end.label:(CAPO!=null?CAPO:formAt(c,s.p))+(stk?' ×'+stk:'');
     /* 汇报主题：卡上的字不让道，说明字写在卡正下方（用户 10-29）；其余主题写在加工区里货的旁边。在卡里时 ×N 写进说明字，不挂货头顶；到了终点写结局 */
-    if(calm()) o+=`<text class="tcap gin${s.end?' end':''}" x="${n.x}" y="${n.y+n.h/2+17}" text-anchor="middle">${esc(fitW(txt,13,n.w+40))}</text>`;
+    if(calm()){ const up=st.cur==='drill'&&!$('#board').hidden;   /* 演练停在岔路时卡下方挂着结局键帽，说明字改写到卡正上方（11-26） */
+      o+=`<text class="tcap gin${s.end?' end':''}" x="${n.x}" y="${up?n.y-n.h/2-9:n.y+n.h/2+17}" text-anchor="middle">${esc(fitW(txt,13,n.w+40))}</text>`; }
     else { const w=PIN.rt?TK.x-14-(n.x-n.w/2+15):(n.x+n.w/2-13)-(TK.x+14), t=fitW(txt,13,Math.max(40,w));
       o+=`<text class="tcap gin${s.end?' end':''}" x="${PIN.rt?TK.x-14:TK.x+14}" y="${n.y+4.5}" text-anchor="${PIN.rt?'end':'start'}">${esc(t)}</text>`; } } }
   else if(s.end) o+=`<text class="tcap end" x="${TK.x}" y="${TK.y+(s.end.k==='exit'?-22:34)}" text-anchor="middle">${esc(s.end.label)}</text>`;
@@ -1435,7 +1442,7 @@ function tick(){ const c=C();
   if(st.beat>=maxBeat()&&(c!==DRILL||DRILL.done)) finished(); }
 /* ── 站内方案 C：到有站内的站时问一次，点了就记住（本机本图）；Agent 不决定进不进 ── */
 const OFFER_MS=2600; let OFFER=null, CAPO=null;
-function innerPref(){ return store.get('inner:'+(D.title||''))==='in'; }
+function innerPref(){ if(URLP.inner) return URLP.inner!=='0'; return store.get('inner:'+(D.title||''))==='in'; }
 function setInnerPref(v){ store.set('inner:'+(D.title||''),v?'in':null); }
 function offerInner(c,i){ clearOffer(); const p=c.path[i], s0=S[p.st], n=N[p.st]; if(!s0||!n) return; const steps=(p.in||[]).filter(x=>x&&x.st), nIn=Object.keys(s0.inner.stations||{}).length;
   const id={}; OFFER={id,sid:p.st,c,i};
@@ -1468,7 +1475,7 @@ function start(){ if(st.timer||!C()) return; clearTimeout(st.next); if(st.beat>=
   const loop=()=>{ tick(); if(st.timer) st.timer=setTimeout(loop,Math.max(TS(BEAT),MOVE+TS(900))); }; st.timer=-1; loop(); renderStat(); }
 /* 播放速度：只改货走一段、每站停留、进出站内、扫描光的时长；开场、演完后的 10 秒、「看里面」等人点的 2.6 秒不随速度变 */
 function spdTxt(v){ return v+'×'; }
-function setSpeed(v){ SPD=v; store.set('speed',v); const b=$('#spdBtn'); if(b){ b.textContent=spdTxt(v); b.classList.toggle('on',v!==1); b.title='播放速度 '+spdTxt(v)+'（[ 慢一档，] 快一档）'; } }
+function setSpeed(v,once){ SPD=v; if(!once) store.set('speed',v); const b=$('#spdBtn'); if(b){ b.textContent=spdTxt(v); b.classList.toggle('on',v!==1); b.title='播放速度 '+spdTxt(v)+'（[ 慢一档，] 快一档）'; } }
 function spdPop(open){ const p=$('#spdPop'), b=$('#spdBtn'); if(!p||!b) return; if(!open){ p.hidden=true; b.setAttribute('aria-expanded','false'); return; }
   const lab={.5:'很慢',.75:'慢',1:'默认',1.25:'',1.5:'快',2:'很快'};
   p.innerHTML='<div class="h">播放速度</div>'+SPEEDS.map(v=>`<button type="button" role="menuitemradio" aria-checked="${v===SPD}" data-spd="${v}" class="${v===SPD?'on':''}"><b>${spdTxt(v)}</b><span>${lab[v]||''}</span></button>`).join('');
@@ -1489,7 +1496,7 @@ function drillAsk(){ const last=drillCur(), s0=S[last.st]; if(!s0) return;
   if(expandVia(s0,s0.branches).length===1){ drillChoose(expandVia(s0,s0.branches)[0].k); return; }
   const used={}; DRILL.path.forEach(p=>{ const x=S[p.st], b=x&&p.br&&brOf(x,p.br); if(b&&b.to==='again'&&b.count){ const k=b.count.name||''; used[k]=(used[k]||0)+1; } });
   stop(); const order=expandVia(s0,[...s0.branches.filter(b=>!b.fault),...s0.branches.filter(b=>b.fault)]).filter(b=>!(b.to==='again'&&b.count&&b.count.max&&(used[b.count.name||'']||0)>=b.count.max));
-  showBoard(`<div class="bh"><b>「${esc(s0.name)}」往哪走？</b><span class="hint">按数字键也能选</span></div>`+order.map((b,i)=>{ const t=b.to||'next', d=t==='end'?((b.end&&b.end.label)||ENDK[(b.end&&b.end.kind)||'failed']):t==='back'?'退回原来那一站':t==='again'?'↺ 下一轮从「'+((S[destOf(s0.id,b)]||{}).name||'线头')+'」再来':(()=>{ const n=destOf(s0.id,b); return n?(n.startsWith('P:')?(PROD[n.slice(2)].door?'出口 '+PROD[n.slice(2)].name:'进「'+PROD[n.slice(2)].name+'」'):'→ '+S[n].name):'？'; })();
+  setTimeout(drawToks,0); showBoard(`<div class="bh"><b>「${esc(s0.name)}」往哪走？</b><span class="hint">按数字键也能选</span></div>`+order.map((b,i)=>{ const t=b.to||'next', d=t==='end'?((b.end&&b.end.label)||ENDK[(b.end&&b.end.kind)||'failed']):t==='back'?'退回原来那一站':t==='again'?'↺ 下一轮从「'+((S[destOf(s0.id,b)]||{}).name||'线头')+'」再来':(()=>{ const n=destOf(s0.id,b); return n?(n.startsWith('P:')?(PROD[n.slice(2)].door?'出口 '+PROD[n.slice(2)].name:'进「'+PROD[n.slice(2)].name+'」'):'→ '+S[n].name):'？'; })();
       const lv=b.fault?lvOfBr(b):null; return `<button type="button" class="bo${lv?' lv-'+lv:''}" data-pick="${esc(b.k)}"><kbd>${i+1}</kbd><span>${esc(b.when)}${String(b.k).split('@')[0]===s0.default&&!(b.viaL&&b.viaL!==VIA(s0.id)[0])?'<span class="tag df">正常</span>':''}${b.only&&s0.modes?`<span class="tag">仅${esc((s0.modes.find(m=>m.id===b.only)||{}).name||b.only)}</span>`:''}${lv&&lv!=='ok'?`<span class="tag lv-${lv}">${LVL[lv]}</span>`:''}</span><span class="to">${esc(d)}</span></button>`; }).join('')+
     (s0.inner?`<button type="button" class="bo inb" data-indrill="${esc(s0.id)}"><kbd>0</kbd><span>进站内，一步步走<span class="tag">${Object.keys(s0.inner.stations||{}).length} 步</span></span><span class="to">走到出口自动回来</span></button>`:'')+
     `<div class="bf"><button type="button" class="lnk" data-undo="1"${DRILL.path.length>1?'':' disabled'}>撤回上一步</button><button type="button" class="lnk" data-exitdrill="1">退出演练</button></div>`);
@@ -2076,15 +2083,16 @@ const SKINS=[
   {k:'harvest',n:'牧场物语',d:'田园出货：奶油底、木框、草地',c:['#D3ECFF','#FFFBF0','#5FA83E','#B5864C','#C9483A']},
   {k:'stone',n:'石纪元',d:'科学王国：石灰底、漫画墨线、科学绿',c:['#E6E3DC','#FBFAF6','#1FA846','#1B1B19','#D63A2E']}];
 const sw5=c=>`<span class="sw5">${c.map(x=>`<i style="background:${x}"></i>`).join('')}</span>`;
-function applySkin(k,announce){ const sk=SKINS.find(x=>x.k===k)||SKINS[0], r=document.documentElement;
+function applySkin(k,announce,once){ const sk=SKINS.find(x=>x.k===k||x.n===k)||SKINS[0], r=document.documentElement;
   delete r.dataset.skin; delete r.dataset.theme;
   if(sk.k==='light'||sk.k==='dark') r.dataset.theme=sk.k; else if(sk.k!=='auto') r.dataset.skin=sk.k;
   const wasCalm=r.hasAttribute('data-calm'); r.toggleAttribute('data-calm',sk.k==='report'); calmWake();
-  store.set('skin',sk.k); const b=$('#themeBtn'); if(b) b.innerHTML=`${sw5(sk.c)} 配色 · ${esc(sk.n)}`;
+  if(!once) store.set('skin',sk.k); const b=$('#themeBtn'); if(b) b.innerHTML=`${sw5(sk.c)} 配色 · ${esc(sk.n)}`;
   const pop=$('#skinPop'); if(pop) pop.innerHTML=SKINS.map(x=>`<button type="button" class="skc${x.k===sk.k?' on':''}" data-skin="${x.k}">${sw5(x.c)}<b>${esc(x.n)}</b><span class="ck">${x.k===sk.k?'在用':''}</span><span class="d">${esc(x.d)}</span></button>`).join('');
   if(announce&&wasCalm!==(sk.k==='report')&&typeof N!=='undefined'&&Object.keys(N).length){ try{ stopTok(); PROC=null; PROC_OUT=null; world.querySelectorAll('.card.proc,.prod.proc').forEach(g=>g.classList.remove('proc')); setBeat(st.beat,false); }catch(e){} }
   if(announce){ toast('已换成「'+sk.n+'」配色'); if(typeof bgGrid==='function'&&N&&Object.keys(N).length) bgGrid(); } }
-applySkin(store.get('skin')||(store.get('theme')==='dark'?'dark':store.get('theme')==='light'?'light':'auto'));
+if(URLP.skin&&SKINS.some(x=>x.k===URLP.skin||x.n===URLP.skin)) applySkin(URLP.skin,false,true);
+else applySkin(store.get('skin')||(store.get('theme')==='dark'?'dark':store.get('theme')==='light'?'light':'auto'));
 document.title=D.title||document.title; $('#ttl').textContent=D.title||''; $('#sub').textContent=(D.page==='monitor'?'运行监控图 · ':'')+(D.subtitle||'');
 $('#helpPop').innerHTML=`<b>怎么看这张图</b><ul>
   <li>一进来先看全图；随后镜头推到入口，演一件样例货，演完自动换下一件</li>
@@ -2102,11 +2110,25 @@ $('#helpPop').innerHTML=`<b>怎么看这张图</b><ul>
   <li>每条出错去向都有「反馈」，生成一段文字贴回和 AI 的对话</li>
   <li>快捷键：空格 播放 / 暂停，逗号 退一步，句号 走一步，[ ] 慢一档 / 快一档，Esc 关面板</li></ul>`;
 if(D.compare&&(D.compare.items||[]).length) $('#cmpBtn').hidden=false;
+/* 链接参数里的视图、只演这条、哪件货 */
+if(URLP.view&&VIEWS().some(([k])=>k===URLP.view)) st.view=URLP.view;
+if(URLP.solo) st.solo=URLP.solo!=='0';
+const URL_BAD=[];
+if(URLP.sample){ const c=pool().find(x=>x.id===URLP.sample); if(c) st.cur=c.id; else URL_BAD.push('样例货「'+URLP.sample+'」'); }
+if(URLP.view&&st.view!==URLP.view) URL_BAD.push('视图「'+URLP.view+'」');
+if(URLP.skin&&!SKINS.some(x=>x.k===URLP.skin||x.n===URLP.skin)) URL_BAD.push('配色「'+URLP.skin+'」');
+if(URLP.station&&!S[URLP.station]) URL_BAD.push('站「'+URLP.station+'」');
+if(URLP.speed&&!SPEEDS.includes(+URLP.speed)) URL_BAD.push('速度「'+URLP.speed+'」');
 renderSegs(); sizeCv(); chooseCols(); routeAll(); bgGrid();
 if(C()){ const q=slotAt(0); TK.x=q.x; TK.y=q.y; }
 renderSmp(); buildWorld(); drawToks(); renderStat(); renderSide();
-requestAnimationFrame(()=>{ fit(false); if(C()) st.next=setTimeout(()=>{ if(!st.userCam&&st.follow) playFrom(st.cur); },reduce?0:1400); });
-setSpeed(SPD); setTimeout(selfCheck,1200);
+requestAnimationFrame(()=>{ fit(false);
+  if(URL_BAD.length) toast('链接参数没认出：'+URL_BAD.join('、')+'，按默认打开');
+  const dr=URLP.drill&&URLP.drill!=='0'?URLP.drill:null, ent=dr&&entries().includes(dr)?dr:null;
+  const go=()=>{ if(dr){ if(ent) playFrom('drill',ent); else playFrom('drill'); } else if(URLP.play!=='0'&&!st.userCam&&st.follow) playFrom(st.cur);
+    if(URLP.station&&S[URLP.station]) setTimeout(()=>selectStation(URLP.station),dr||URLP.play==='0'?0:300); };
+  if(C()||dr) st.next=setTimeout(go,reduce?0:1400); });
+if(SPEEDS.includes(+URLP.speed)) setSpeed(+URLP.speed,true); else setSpeed(SPD); setTimeout(selfCheck,1200);
 </script>
 </body>
 </html>

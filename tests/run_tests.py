@@ -82,10 +82,15 @@ def main():
         if not node:
             print('  跳过  无头检查：找不到 node')
         else:
-            for extra in ([], ['--size', '390x844'], ['--theme', 'dark'], ['--view', 'fault']):
+            # （参数, 期望退出码, 输出里要有的字）：汇报配色、链接直达演练、传错参数报错、超时以失败退出
+            cases = [([], 0, ''), (['--size', '390x844'], 0, ''), (['--theme', 'dark'], 0, ''), (['--view', 'fault'], 0, ''),
+                     (['--skin', 'report'], 0, '"calm":true'), (['--hash', 'skin.report~drill~speed.0.75'], 0, '"skin":"report"'),
+                     (['--beat', '3', '--sample', 's1'], 0, ''), (['--sampel', 's1'], 2, '不认识的参数'), (['--timeout', '1'], 3, '超时')]
+            for extra, want, has in cases:
                 r = subprocess.run([node, CHECK, out, *extra], capture_output=True, text=True, encoding='utf-8', errors='replace')
-                last = r.stdout.strip().splitlines()[-2:] if r.stdout.strip() else [r.stderr.strip()[:200]]
-                good = r.returncode == 0
+                txt = r.stdout + r.stderr
+                last = r.stdout.strip().splitlines()[-2:] if r.stdout.strip() else [r.stderr.strip().splitlines()[0][:200] if r.stderr.strip() else '']
+                good = r.returncode == want and has in txt
                 print(('  通过  ' if good else '  不符  ') + f'无头 {" ".join(extra) or "默认"}：{" ".join(last)}')
                 if not good:
                     fails.append('headless ' + ' '.join(extra))
