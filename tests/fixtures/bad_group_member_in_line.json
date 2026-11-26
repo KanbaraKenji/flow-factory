@@ -1,0 +1,373 @@
+{
+ "schema": "flow-factory/0",
+ "title": "组成员写进了线",
+ "subtitle": "QE、IE、样制同时审，都通过才制作 · 样例货为虚构",
+ "summary": {
+  "input": "业务员开的一张样品单",
+  "output": "做好的样品，样品单结单"
+ },
+ "source": {
+  "rev": "test-20261126"
+ },
+ "groups": [
+  {
+   "id": "review",
+   "name": "三方审核",
+   "mode": "all",
+   "stations": [
+    "qe",
+    "ie",
+    "smp"
+   ],
+   "on_return": "others_continue"
+  }
+ ],
+ "lines": [
+  {
+   "id": "main",
+   "name": "样品单",
+   "stations": [
+    "open",
+    "review",
+    "qe",
+    "make",
+    "close"
+   ],
+   "product": "done"
+  }
+ ],
+ "stations": {
+  "open": {
+   "name": "开单",
+   "kind": "in",
+   "actor": "业务员",
+   "does": "填款号、数量、交期，提交审核",
+   "input": "客户的打样需求",
+   "output": "待审样品单",
+   "writes": [
+    {
+     "store": "db",
+     "what": "样品单 状态 = 待审"
+    }
+   ],
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "提交",
+     "to": "next"
+    }
+   ],
+   "unhandled": {
+    "user_sees": "提交失败时页面报错，单子没建",
+    "verdict": {
+     "level": "ok",
+     "note": "当场报错让人重填，不用管"
+    }
+   }
+  },
+  "qe": {
+   "name": "QE 审核",
+   "kind": "check",
+   "actor": "QE",
+   "does": "看质量要求和检验标准",
+   "input": "待审样品单",
+   "output": "QE 意见",
+   "writes": [
+    {
+     "store": "db",
+     "what": "审核记录 QE"
+    }
+   ],
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "QE 同意",
+     "to": "next"
+    },
+    {
+     "k": "back",
+     "when": "QE 退回",
+     "to": "open",
+     "fault": {
+      "kind": "human",
+      "user_sees": "业务员看到退回原因，改完重提",
+      "verdict": {
+       "level": "ok",
+       "note": "当场退回让人改，不用管"
+      }
+     }
+    }
+   ]
+  },
+  "ie": {
+   "name": "IE 审核",
+   "kind": "check",
+   "actor": "IE",
+   "does": "核工时和工序",
+   "input": "待审样品单",
+   "output": "IE 意见",
+   "optional": "分厂没有 IE，自动跳过",
+   "writes": [
+    {
+     "store": "db",
+     "what": "审核记录 IE"
+    }
+   ],
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "IE 同意",
+     "to": "next"
+    },
+    {
+     "k": "back",
+     "when": "IE 退回",
+     "to": "open",
+     "fault": {
+      "kind": "human",
+      "user_sees": "业务员看到退回原因，改完重提",
+      "verdict": {
+       "level": "ok",
+       "note": "当场退回让人改，不用管"
+      }
+     }
+    }
+   ]
+  },
+  "smp": {
+   "name": "样制审核",
+   "kind": "check",
+   "actor": "样制",
+   "does": "看现有物料和机台能不能做",
+   "input": "待审样品单",
+   "output": "样制意见",
+   "writes": [
+    {
+     "store": "db",
+     "what": "审核记录 样制"
+    }
+   ],
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "样制同意",
+     "to": "next"
+    },
+    {
+     "k": "back",
+     "when": "样制退回",
+     "to": "open",
+     "fault": {
+      "kind": "human",
+      "user_sees": "业务员看到缺料，只能改款或等料",
+      "verdict": {
+       "level": "risk",
+       "note": "退回后不提醒补料。建议：缺料退回时同时推给采购"
+      }
+     }
+    }
+   ]
+  },
+  "make": {
+   "name": "制作",
+   "kind": "step",
+   "actor": "样品间",
+   "does": "按单打样",
+   "input": "审核通过的样品单",
+   "output": "样品",
+   "writes": [
+    {
+     "store": "db",
+     "what": "样品单 状态 = 制作中"
+    }
+   ],
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "做好了",
+     "to": "next"
+    },
+    {
+     "k": "fail",
+     "when": "打样失败",
+     "to": "end",
+     "end": {
+      "kind": "blocked",
+      "label": "等样品间重排"
+     },
+     "fault": {
+      "kind": "human",
+      "user_sees": "单子停在制作中",
+      "verdict": {
+       "level": "ok",
+       "note": "样品间当天会重排，不用管"
+      }
+     }
+    }
+   ]
+  },
+  "close": {
+   "name": "结单",
+   "kind": "out",
+   "actor": "业务员",
+   "does": "寄样、结单",
+   "input": "样品",
+   "output": "已结单",
+   "writes": [
+    {
+     "store": "db",
+     "what": "样品单 状态 = 已结单"
+    }
+   ],
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "寄出",
+     "to": "next"
+    }
+   ],
+   "unhandled": {
+    "user_sees": "寄样失败时单子停在待结单",
+    "verdict": {
+     "level": "ok",
+     "note": "业务员当场能看到，不用管"
+    }
+   }
+  }
+ },
+ "products": [
+  {
+   "id": "done",
+   "name": "已结单",
+   "desc": "样品寄给客户"
+  }
+ ],
+ "stores": [
+  {
+   "id": "db",
+   "name": "样品单库",
+   "kind": "db"
+  }
+ ],
+ "samples": [
+  {
+   "id": "s1",
+   "name": "三方都同意",
+   "badge": "顺",
+   "desc": "苏州厂的常规款",
+   "input": "样品单 #S-0412",
+   "path": [
+    {
+     "st": "open",
+     "br": "ok",
+     "form": "待审单 #S-0412"
+    },
+    {
+     "st": "review",
+     "each": {
+      "qe": "ok",
+      "ie": "ok",
+      "smp": "ok"
+     },
+     "form": "审核通过的单"
+    },
+    {
+     "st": "make",
+     "br": "ok",
+     "form": "样品 3 件"
+    },
+    {
+     "st": "close",
+     "br": "ok",
+     "form": "已寄出的样品"
+    }
+   ]
+  },
+  {
+   "id": "s2",
+   "name": "分厂，没有 IE",
+   "badge": "分",
+   "desc": "IE 那一方自动跳过",
+   "input": "样品单 #S-0413",
+   "path": [
+    {
+     "st": "open",
+     "br": "ok",
+     "form": "待审单 #S-0413"
+    },
+    {
+     "st": "review",
+     "each": {
+      "qe": "ok",
+      "ie": "skip",
+      "smp": "ok"
+     },
+     "form": "审核通过的单"
+    },
+    {
+     "st": "make",
+     "br": "ok",
+     "form": "样品 2 件"
+    },
+    {
+     "st": "close",
+     "br": "ok",
+     "form": "已寄出的样品"
+    }
+   ]
+  },
+  {
+   "id": "s3",
+   "name": "样制退回",
+   "badge": "退",
+   "desc": "缺料，退回业务员",
+   "input": "样品单 #S-0414",
+   "path": [
+    {
+     "st": "open",
+     "br": "ok",
+     "form": "待审单 #S-0414"
+    },
+    {
+     "st": "review",
+     "each": {
+      "qe": "ok",
+      "ie": "ok",
+      "smp": "back"
+     },
+     "form": "被退回的单"
+    },
+    {
+     "st": "open",
+     "br": "ok",
+     "form": "改了款的单"
+    },
+    {
+     "st": "review",
+     "each": {
+      "qe": "ok",
+      "ie": "ok",
+      "smp": "ok"
+     },
+     "form": "审核通过的单"
+    },
+    {
+     "st": "make",
+     "br": "ok",
+     "form": "样品 1 件"
+    },
+    {
+     "st": "close",
+     "br": "ok",
+     "form": "已寄出的样品"
+    }
+   ]
+  }
+ ]
+}

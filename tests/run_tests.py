@@ -94,6 +94,15 @@ def main():
                 print(('  通过  ' if good else '  不符  ') + f'无头 {" ".join(extra) or "默认"}：{" ".join(last)}')
                 if not good:
                     fails.append('headless ' + ' '.join(extra))
+            # 几方同时处理（会签组）：停在组里、退回、汇报配色、演练直达
+            grp = os.path.join(tmp, 'group.html')
+            run_build(os.path.join(FIX, 'ok_parallel_review.json'), '-o', grp)
+            for extra in (['--sample', 's2', '--beat', '2'], ['--sample', 's3', '--beat', '3', '--skin', 'report'], ['--view', 'fault', '--station', 'review'], ['--hash', 'drill=1', '--size', '390x844']):
+                r = subprocess.run([node, CHECK, grp, *extra], capture_output=True, text=True, encoding='utf-8', errors='replace')
+                good = r.returncode == 0 and '"6/6"' in r.stdout
+                print(('  通过  ' if good else '  不符  ') + f'无头 会签组 {" ".join(extra)}：{" ".join(r.stdout.strip().splitlines()[-2:])}')
+                if not good:
+                    fails.append('headless group ' + ' '.join(extra))
     shutil.rmtree(tmp, ignore_errors=True)
     print(f'\n{len(fails)} 项不符' if fails else '\n全部通过')
     return 1 if fails else 0

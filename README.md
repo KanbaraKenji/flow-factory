@@ -69,7 +69,7 @@ python -X utf8 scripts/build.py assets/example.flow.json -o example.html
 | 文件 | 作用 |
 |---|---|
 | `SKILL.md` | 给 AI 的操作手册：什么时候出图、出图七步、写作规则、页面里有什么、接反馈 |
-| `references/data-format.md` | `flow.json` 格式（schema `flow-factory/0`）：线、站、岔路、成品库、写入目标、样例货、站内小流程、四种结构、运行记录 |
+| `references/data-format.md` | `flow.json` 格式（schema `flow-factory/0`）：线、站、岔路、成品库、写入目标、样例货、站内小流程、五种结构、运行记录 |
 | `references/case-law.md` | 判例库（append-only）：每条规则从哪次纠正来 |
 | `references/report-style.md` | 汇报主题参照的风格规范 |
 | `assets/renderer.html` | 渲染器模板：布局、布线、动画、视图、盒中盒、演练、寻路、配色、面板、自检 |

@@ -1,0 +1,305 @@
+{
+ "schema": "flow-factory/0",
+ "title": "路线很多",
+ "lines": [
+  {
+   "id": "m",
+   "name": "主线",
+   "stations": [
+    "s0",
+    "s1",
+    "s2",
+    "s3",
+    "s4",
+    "s5",
+    "s6",
+    "s7"
+   ],
+   "product": "p"
+  }
+ ],
+ "stations": {
+  "s0": {
+   "name": "第0站",
+   "kind": "step",
+   "does": "处理",
+   "input": "单",
+   "output": "单",
+   "default": "a",
+   "branches": [
+    {
+     "k": "a",
+     "when": "甲",
+     "to": "next"
+    },
+    {
+     "k": "b",
+     "when": "乙",
+     "to": "next"
+    },
+    {
+     "k": "c",
+     "when": "丙",
+     "to": "next"
+    }
+   ],
+   "unhandled": {
+    "user_sees": "无",
+    "verdict": {
+     "level": "ok",
+     "note": "无"
+    }
+   }
+  },
+  "s1": {
+   "name": "第1站",
+   "kind": "step",
+   "does": "处理",
+   "input": "单",
+   "output": "单",
+   "default": "a",
+   "branches": [
+    {
+     "k": "a",
+     "when": "甲",
+     "to": "next"
+    },
+    {
+     "k": "b",
+     "when": "乙",
+     "to": "next"
+    },
+    {
+     "k": "c",
+     "when": "丙",
+     "to": "next"
+    }
+   ],
+   "unhandled": {
+    "user_sees": "无",
+    "verdict": {
+     "level": "ok",
+     "note": "无"
+    }
+   }
+  },
+  "s2": {
+   "name": "第2站",
+   "kind": "step",
+   "does": "处理",
+   "input": "单",
+   "output": "单",
+   "default": "a",
+   "branches": [
+    {
+     "k": "a",
+     "when": "甲",
+     "to": "next"
+    },
+    {
+     "k": "b",
+     "when": "乙",
+     "to": "next"
+    },
+    {
+     "k": "c",
+     "when": "丙",
+     "to": "next"
+    }
+   ],
+   "unhandled": {
+    "user_sees": "无",
+    "verdict": {
+     "level": "ok",
+     "note": "无"
+    }
+   }
+  },
+  "s3": {
+   "name": "第3站",
+   "kind": "step",
+   "does": "处理",
+   "input": "单",
+   "output": "单",
+   "default": "a",
+   "branches": [
+    {
+     "k": "a",
+     "when": "甲",
+     "to": "next"
+    },
+    {
+     "k": "b",
+     "when": "乙",
+     "to": "next"
+    },
+    {
+     "k": "c",
+     "when": "丙",
+     "to": "next"
+    }
+   ],
+   "unhandled": {
+    "user_sees": "无",
+    "verdict": {
+     "level": "ok",
+     "note": "无"
+    }
+   }
+  },
+  "s4": {
+   "name": "第4站",
+   "kind": "step",
+   "does": "处理",
+   "input": "单",
+   "output": "单",
+   "default": "a",
+   "branches": [
+    {
+     "k": "a",
+     "when": "甲",
+     "to": "next"
+    },
+    {
+     "k": "b",
+     "when": "乙",
+     "to": "next"
+    },
+    {
+     "k": "c",
+     "when": "丙",
+     "to": "next"
+    }
+   ],
+   "unhandled": {
+    "user_sees": "无",
+    "verdict": {
+     "level": "ok",
+     "note": "无"
+    }
+   }
+  },
+  "s5": {
+   "name": "第5站",
+   "kind": "step",
+   "does": "处理",
+   "input": "单",
+   "output": "单",
+   "default": "a",
+   "branches": [
+    {
+     "k": "a",
+     "when": "甲",
+     "to": "next"
+    },
+    {
+     "k": "b",
+     "when": "乙",
+     "to": "next"
+    },
+    {
+     "k": "c",
+     "when": "丙",
+     "to": "next"
+    }
+   ],
+   "unhandled": {
+    "user_sees": "无",
+    "verdict": {
+     "level": "ok",
+     "note": "无"
+    }
+   }
+  },
+  "s6": {
+   "name": "第6站",
+   "kind": "step",
+   "does": "处理",
+   "input": "单",
+   "output": "单",
+   "default": "a",
+   "branches": [
+    {
+     "k": "a",
+     "when": "甲",
+     "to": "next"
+    },
+    {
+     "k": "b",
+     "when": "乙",
+     "to": "next"
+    },
+    {
+     "k": "c",
+     "when": "丙",
+     "to": "next"
+    }
+   ],
+   "unhandled": {
+    "user_sees": "无",
+    "verdict": {
+     "level": "ok",
+     "note": "无"
+    }
+   }
+  },
+  "s7": {
+   "name": "第7站",
+   "kind": "step",
+   "does": "处理",
+   "input": "单",
+   "output": "单",
+   "default": "a",
+   "branches": [
+    {
+     "k": "a",
+     "when": "甲",
+     "to": "next"
+    },
+    {
+     "k": "b",
+     "when": "乙",
+     "to": "next"
+    },
+    {
+     "k": "c",
+     "when": "丙",
+     "to": "next"
+    },
+    {
+     "k": "z",
+     "when": "只在最后才有",
+     "to": "end",
+     "end": {
+      "kind": "done",
+      "label": "特例"
+     }
+    }
+   ],
+   "unhandled": {
+    "user_sees": "无",
+    "verdict": {
+     "level": "ok",
+     "note": "无"
+    }
+   }
+  }
+ },
+ "products": [
+  {
+   "id": "p",
+   "name": "完成",
+   "desc": "完"
+  }
+ ],
+ "summary": {
+  "input": "一张单",
+  "output": "完成"
+ },
+ "source": {
+  "repo": "example",
+  "rev": "git:0000000",
+  "files": [],
+  "drawn": "2026-11-26"
+ }
+}
