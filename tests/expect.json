@@ -1,0 +1,126 @@
+{
+ "bad_again_no_count_head.json": {
+  "expect": "warn",
+  "contains": "站「label」 岔路「api_down」"
+ },
+ "bad_badge2.json": {
+  "expect": "warn",
+  "contains": "样例货「s1」 的 badge「普通」要一个"
+ },
+ "bad_cols11.json": {
+  "expect": "warn",
+  "contains": "layout.cols 要是 3~10 的整"
+ },
+ "bad_cols2.json": {
+  "expect": "warn",
+  "contains": "layout.cols 要是 3~10 的整"
+ },
+ "bad_desc31.json": {
+  "expect": "warn",
+  "contains": "成品库「done」的 desc 太长（≤ 3"
+ },
+ "bad_dup_station_in_lines.json": {
+  "expect": "error",
+  "contains": "站「pay」同时属于两条线 main 和 r"
+ },
+ "bad_end_missing.json": {
+  "expect": "error",
+  "contains": "站「pay」 岔路「timeout」 停在这"
+ },
+ "bad_every9.json": {
+  "expect": "warn",
+  "contains": "线 main 的 every「一二三四五六七"
+ },
+ "bad_fault_risk_no_advice.json": {
+  "expect": "error",
+  "contains": "站「stock」 岔路「short」 判成有"
+ },
+ "bad_inner_dupid.json": {
+  "expect": "error",
+  "contains": "站「pay」 站内的站 id 和外面重名：["
+ },
+ "bad_inner_end.json": {
+  "expect": "error",
+  "contains": "站「pay」站内：站「book」 岔路「ok"
+ },
+ "bad_inner_exit_bad.json": {
+  "expect": "error",
+  "contains": "站「pay」站内：站「book」 岔路「ok"
+ },
+ "bad_inner_exit_unknown.json": {
+  "expect": "error",
+  "contains": "站「pay」站内：站「wait_cb」 岔路"
+ },
+ "bad_inner_missing_exit.json": {
+  "expect": "error",
+  "contains": "站「pay」 的岔路 ['extra'] 在"
+ },
+ "bad_kind_bad.json": {
+  "expect": "error",
+  "contains": "站「pay」 的 kind「weird」不在"
+ },
+ "bad_modename5.json": {
+  "expect": "warn",
+  "contains": "站「pack」 的入口名「一二三四五」太长（"
+ },
+ "bad_monitor_noruns.json": {
+  "expect": "warn",
+  "contains": "page 是 monitor（运行监控图），"
+ },
+ "bad_name9.json": {
+  "expect": "error",
+  "contains": "站「pay」 的站名「收款收款收款收款收」太"
+ },
+ "bad_product_and_then.json": {
+  "expect": "warn",
+  "contains": "线 main 同时写了 product 和"
+ },
+ "bad_sample_in_wrong_exit.json": {
+  "expect": "error",
+  "contains": "站「pay」站内：样例货「s3」 第 2 步"
+ },
+ "bad_sample_in_wrong_exit2.json": {
+  "expect": "error",
+  "contains": "站「pay」站内：样例货「s3」 第 2 步"
+ },
+ "bad_store11.json": {
+  "expect": "warn",
+  "contains": "写入目标「db」的名字太长（≤ 10 字）"
+ },
+ "bad_title1.json": {
+  "expect": "warn",
+  "contains": "标题「网」建议 2~12 字（页头和画廊卡片"
+ },
+ "bad_title13.json": {
+  "expect": "warn",
+  "contains": "标题「一二三四五六七八九十一二三」建议 2~"
+ },
+ "bad_to_unknown.json": {
+  "expect": "error",
+  "contains": "站「pay」 岔路「ok」 的 to「now"
+ },
+ "bad_when15.json": {
+  "expect": "warn",
+  "contains": "站「pay」 的 when「一二三四五六七八"
+ },
+ "ok_four_structures.json": {
+  "expect": "warn",
+  "contains": "站「wake」站内：站「w1」 没写 inp"
+ },
+ "ok_inner_three_levels.json": {
+  "expect": "warn",
+  "contains": "站「pay/wait_cb」站内：站「pol"
+ },
+ "ok_monitor_with_inner.json": {
+  "expect": "clean"
+ },
+ "ok_no_samples.json": {
+  "expect": "clean"
+ },
+ "ok_runs.json": {
+  "expect": "clean"
+ },
+ "ok_two_inner_doors_same_belt.json": {
+  "expect": "clean"
+ }
+}

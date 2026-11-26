@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+# 本地构建产物与截图
+*.html
+!assets/renderer.html
+*.png
+tests/out/

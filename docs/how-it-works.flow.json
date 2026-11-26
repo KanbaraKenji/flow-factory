@@ -1,0 +1,282 @@
+{
+ "schema": "flow-factory/0",
+ "page": "dev",
+ "title": "flow-factory 出图",
+ "subtitle": "这个 skill 自己的工作原理 · 样例货为虚构",
+ "summary": {
+  "input": "用户问「这段怎么跑的」",
+  "output": "一张能点能动的流程图页面"
+ },
+ "source": {
+  "repo": "flow-factory",
+  "rev": "mtime:2026-11-02",
+  "files": ["SKILL.md", "scripts/build.py", "scripts/check.mjs", "assets/renderer.html", "references/data-format.md"],
+  "drawn": "2026-11-02"
+ },
+ "lines": [
+  {"id": "main", "name": "出图主线", "stations": ["ask", "scope", "read", "write", "build", "check", "deliver"], "product": "page", "trigger": "用户提问"},
+  {"id": "fb", "name": "反馈回炉", "stations": ["paste", "locate", "verify"], "then": "write", "trigger": "用户贴回文字"}
+ ],
+ "stations": {
+  "ask": {
+   "name": "收到提问", "kind": "in", "actor": "对话",
+   "does": "看问题牵涉几步、几个模块",
+   "detail": "触发词：为什么 / 怎么做到的 / 原理是什么 / 画给我看；同一原理问第二次也算；要批跨模块方案时先画现状。",
+   "input": "用户的一句话", "output": "要讲清的原理",
+   "code": "SKILL.md §1",
+   "default": "ok",
+   "branches": [
+    {"k": "ok", "when": "牵涉 3 步以上或 2 个模块", "to": "next"},
+    {"k": "small", "when": "只动一两站的小事", "to": "end", "end": {"kind": "done", "label": "一句话答复，不开画布"}}
+   ],
+   "unhandled": {"user_sees": "提问本身不会出错", "verdict": {"level": "ok", "note": "判断错了也只是多画或少画一张图"}}
+  },
+  "scope": {
+   "name": "定范围", "kind": "check", "actor": "AI",
+   "does": "一张图只答一个「从什么到什么」",
+   "detail": "写进 summary.input / output；站多到一屏看不全时考虑拆成两张，22 站一张试用中还读得下。",
+   "input": "要讲清的原理", "output": "输入与成品各一句",
+   "code": "SKILL.md §2 第 1 步",
+   "default": "ok",
+   "branches": [{"k": "ok", "when": "说得出输入和成品", "to": "next"}],
+   "unhandled": {"user_sees": "范围定大了图会挤，定小了答不全", "verdict": {"level": "ok", "note": "出图后看截图再拆或并，不设硬门槛"}}
+  },
+  "read": {
+   "name": "读代码", "kind": "ai", "actor": "AI",
+   "does": "从入口读到每个出口，逐站记笔记",
+   "detail": "记：做什么、货进出的样子、每个判断的触发条件、出错怎么处理、写了哪里、哪些动作收不回、代码位置。只读，不改用户的代码。",
+   "input": "用户的代码", "output": "站点与岔路笔记",
+   "code": "SKILL.md §2 第 2 步",
+   "reads": [{"store": "code", "what": "入口到所有出口"}],
+   "default": "ok",
+   "branches": [
+    {"k": "ok", "when": "每个出错去向都找到了", "to": "next"},
+    {"k": "gap", "when": "出错处理在代码里看不出", "to": "next",
+     "fault": {"kind": "degrade", "user_sees": "故障视图里那站标「未处理」",
+      "verdict": {"level": "ok", "note": "如实写 unhandled，缺口摆在图上让人看见", "why": "data-format.md「unhandled」节"}}}
+   ]
+  },
+  "write": {
+   "name": "写 flow.json", "kind": "ai", "actor": "AI",
+   "does": "按格式填线、站、岔路、样例货",
+   "detail": "不写坐标，布局全靠渲染器自动算。字数上限：站名 8、岔路条件 14、一句话 24；依据写进 detail 与 verdict.why，不计字数。",
+   "input": "站点与岔路笔记", "output": "flow.json",
+   "code": "references/data-format.md",
+   "writes": [{"store": "flowjson", "what": "整份重写"}],
+   "irreversible": {"type": "overwrite", "what": "改版时覆盖上一版 flow.json",
+    "protection": {"level": "risk", "note": "旧版没了就做不了版本对比。建议：改版前另存一份，构建时加 --prev", "why": "build.py --prev 要读上一版文件"}},
+   "default": "ok",
+   "branches": [{"k": "ok", "when": "字段写齐", "to": "next"}],
+   "unhandled": {"user_sees": "写错的地方下一站会拦下", "verdict": {"level": "ok", "note": "校验器兜底，写错不会出页面"}}
+  },
+  "build": {
+   "name": "校验构建", "kind": "gate", "actor": "build.py",
+   "does": "校验数据，塞进渲染器出一个 HTML",
+   "detail": "只用 Python 标准库。--check 只校验不出页面；--prev 上一版.json 会在页面里多出「对比上一版」。",
+   "input": "flow.json", "output": "自包含 HTML",
+   "code": "scripts/build.py:520 build()",
+   "writes": [{"store": "html", "what": "写出页面文件"}],
+   "default": "ok",
+   "branches": [
+    {"k": "ok", "when": "0 个错误", "to": "next"},
+    {"k": "err", "when": "有错误", "to": "write",
+     "fault": {"kind": "retry", "user_sees": "终端列出「错误：…」，不出页面",
+      "verdict": {"level": "ok", "note": "当场退回改，不出半成品页面"}}}
+   ],
+   "inner": {
+    "lines": [{"id": "b_in", "name": "构建站内", "stations": ["parse", "lint", "routes", "assemble"]}],
+    "stations": {
+     "parse": {
+      "name": "读入", "kind": "step", "actor": "build.py",
+      "does": "按 UTF-8 读入 JSON",
+      "input": "flow.json", "output": "数据对象",
+      "code": "scripts/build.py:521",
+      "default": "ok",
+      "branches": [
+       {"k": "ok", "when": "是合法 JSON", "to": "next"},
+       {"k": "bad", "when": "JSON 语法错", "to": "exit", "exit": "err",
+        "fault": {"kind": "stop", "user_sees": "终端打出一大段 Python 报错",
+         "verdict": {"level": "risk", "note": "报错栈不是人话。建议：捕获解析错，改成「第 N 行第 M 列」一句", "why": "build() 直接 json.load，没有 try"}}}
+      ]
+     },
+     "lint": {
+      "name": "逐条校验", "kind": "check", "actor": "build.py",
+      "does": "查字段、字数、去向、站内契约、样例路线",
+      "detail": "报「错误」的不出页面（页面会坏或读不懂）；报「提醒」的照常出页面，比如字太长、AI 腔、有隐患的岔路没有样例货走到。",
+      "input": "数据对象", "output": "错误与提醒清单",
+      "code": "scripts/build.py:49 validate()",
+      "default": "pass",
+      "branches": [
+       {"k": "pass", "when": "没有错误，可带提醒", "to": "next"},
+       {"k": "err", "when": "有错误", "to": "exit", "exit": "err",
+        "fault": {"kind": "retry", "user_sees": "终端列出「错误：…」，不出页面",
+         "verdict": {"level": "ok", "note": "每条错误写明哪站哪条岔路、怎么改"}}}
+      ]
+     },
+     "routes": {
+      "name": "数路线", "kind": "step", "actor": "build.py",
+      "does": "深度优先数全部路线和最长步数",
+      "detail": "规则与页面同一套：每站先走 default，同一站一条路线最多进两次，最多 60 条。用来决定写不写样例货。",
+      "input": "错误与提醒清单", "output": "路线条数",
+      "code": "scripts/build.py:413 walk()",
+      "default": "ok",
+      "branches": [{"k": "ok", "when": "数完", "to": "next"}],
+      "unhandled": {"user_sees": "纯计算，几乎不会出错", "verdict": {"level": "ok", "note": "路线有上限，绕圈的图也会停"}}
+     },
+     "assemble": {
+      "name": "拼页面", "kind": "step", "actor": "build.py",
+      "does": "数据塞进渲染器模板，写出单个 HTML",
+      "detail": "模板 assets/renderer.html 里的 __FLOW_DATA__ 换成数据；页面不连外网，单文件即可发。",
+      "input": "数据对象", "output": "自包含 HTML",
+      "code": "scripts/build.py:541",
+      "writes": [{"store": "html", "what": "页面文件"}],
+      "default": "ok",
+      "branches": [{"k": "ok", "when": "写出文件", "to": "exit", "exit": "ok"}],
+      "unhandled": {"user_sees": "磁盘写不进时终端报错", "verdict": {"level": "ok", "note": "罕见，报错直接可见"}}
+     }
+    }
+   }
+  },
+  "check": {
+   "name": "无头自查", "kind": "check", "actor": "check.mjs",
+   "does": "无头 Chrome 打开页面，读自检、截图",
+   "detail": "页面自带 6 项自检：卡片不重叠、字在框内、播放栏在首屏、每站画出来、每条带子有路线、不横向滚动。AI 再看截图：站名没截断、带子没穿卡片。",
+   "input": "自包含 HTML", "output": "自检结果与截图",
+   "code": "scripts/check.mjs；renderer.html selfCheck()",
+   "writes": [{"store": "shots", "what": "按需截图"}],
+   "default": "ok",
+   "branches": [
+    {"k": "ok", "when": "自检全过、没报错", "to": "next"},
+    {"k": "fail", "when": "自检没过或有报错", "to": "write",
+     "fault": {"kind": "retry", "user_sees": "终端列出没过的项和页面报错",
+      "verdict": {"level": "ok", "note": "多半是字太长，改 flow.json 再构建"}}},
+    {"k": "nochrome", "when": "本机找不到 Chrome", "to": "next",
+     "fault": {"kind": "degrade", "user_sees": "页面没经过自查就交给用户",
+      "verdict": {"level": "risk", "note": "建议：交付时写明「未自查」，请用户看真页面再确认", "why": "check.mjs 找不到浏览器时直接退出，构建不受影响"}}}
+   ]
+  },
+  "deliver": {
+   "name": "交付", "kind": "out", "actor": "AI",
+   "does": "发布成 Artifact 或把 HTML 给用户",
+   "detail": "回复里三句话：这张图从什么到什么、播放后看哪里、故障视图里有几站「需要补」。",
+   "input": "自检过的页面", "output": "能点能动的流程图",
+   "code": "SKILL.md §2 第 7 步",
+   "writes": [{"store": "artifact", "what": "发布页面"}],
+   "irreversible": {"type": "send", "what": "页面上传到 claude.ai",
+    "protection": {"level": "ok", "note": "默认私有，分享与否由用户决定"}},
+   "default": "ok",
+   "branches": [{"k": "ok", "when": "用户拿到页面", "to": "next"}],
+   "unhandled": {"user_sees": "不在 claude.ai 时改为给文件", "verdict": {"level": "ok", "note": "单文件 HTML，哪都能打开"}}
+  },
+  "paste": {
+   "name": "贴回反馈", "kind": "in", "actor": "用户",
+   "does": "把页面生成的文字贴回对话",
+   "detail": "页面里每条出错去向和每个站都有「反馈」；演练走到头可以「复制成样例货」。文字里带图名、版本、站 id、条目键。",
+   "input": "页面上点的反馈", "output": "带站 id 的文字",
+   "code": "renderer.html 反馈文字生成",
+   "default": "fb",
+   "branches": [
+    {"k": "fb", "when": "贴的是流程图反馈", "to": "next"},
+    {"k": "sample", "when": "贴的是样例货 JSON", "to": "write"}
+   ],
+   "unhandled": {"user_sees": "贴错了 AI 会认不出格式", "verdict": {"level": "ok", "note": "两种文字都有固定开头，认得出"}}
+  },
+  "locate": {
+   "name": "按站定位", "kind": "ai", "actor": "AI",
+   "does": "按站 id 和条目键找到那一条",
+   "input": "带站 id 的文字", "output": "flow.json 里那一条",
+   "code": "SKILL.md §5",
+   "reads": [{"store": "flowjson", "what": "按站 id 查"}],
+   "default": "ok",
+   "branches": [
+    {"k": "ok", "when": "找到那一条", "to": "next"},
+    {"k": "gone", "when": "那站已不在图里", "to": "read",
+     "fault": {"kind": "retry", "user_sees": "AI 先比代码版本再重读",
+      "verdict": {"level": "ok", "note": "比 source.rev，只重读变动的文件"}}}
+   ]
+  },
+  "verify": {
+   "name": "核代码定性", "kind": "check", "actor": "AI",
+   "does": "核代码，按用户的看法改那一条",
+   "detail": "「这是问题」属实 → 改成有隐患或需要补并给建议；「这是设计好的」→ 改成不用管，把理由写进 note；「我没看懂」→ 重写那三行人话。",
+   "input": "flow.json 里那一条", "output": "改好的判断",
+   "code": "SKILL.md §5",
+   "reads": [{"store": "code", "what": "核对那一站的代码"}],
+   "default": "bug",
+   "branches": [
+    {"k": "bug", "when": "用户说是问题，属实", "to": "next"},
+    {"k": "design", "when": "用户说是设计好的", "to": "next"},
+    {"k": "huh", "when": "用户说没看懂", "to": "next"},
+    {"k": "nope", "when": "核代码后不属实", "to": "end", "end": {"kind": "done", "label": "回复依据，不改图"}}
+   ],
+   "unhandled": {"user_sees": "核错了，判断会写反", "verdict": {"level": "ok", "note": "改完重新出图，用户还能再反馈"}}
+  }
+ },
+ "products": [
+  {"id": "page", "name": "流程图页面", "desc": "自包含 HTML：流程、写入、故障三视图"}
+ ],
+ "stores": [
+  {"id": "code", "name": "用户代码", "kind": "file"},
+  {"id": "flowjson", "name": "flow.json", "kind": "file"},
+  {"id": "html", "name": "页面 HTML", "kind": "file"},
+  {"id": "shots", "name": "截图", "kind": "file"},
+  {"id": "artifact", "name": "Artifact", "kind": "api"}
+ ],
+ "samples": [
+  {"id": "s1", "name": "问原理，出一张图", "badge": "图", "desc": "正常走完全程",
+   "input": "「看门狗为什么会重复接回？」",
+   "path": [
+    {"st": "ask", "br": "ok", "form": "要讲清的接回机制"},
+    {"st": "scope", "br": "ok", "form": "从桌面端上线到接回"},
+    {"st": "read", "br": "ok", "form": "12 站、30 条岔路笔记"},
+    {"st": "write", "br": "ok", "form": "flow.json 12 站"},
+    {"st": "build", "br": "ok", "form": "页面 250 KB", "in": [
+     {"st": "parse", "br": "ok", "form": "数据对象"},
+     {"st": "lint", "br": "pass", "form": "0 错误 2 提醒"},
+     {"st": "routes", "br": "ok", "form": "全部路线 14 条"},
+     {"st": "assemble", "br": "ok", "form": "页面 250 KB"}]},
+    {"st": "check", "br": "ok", "form": "自检 6/6、截图 4 张"},
+    {"st": "deliver", "br": "ok", "form": "Artifact 链接"}
+   ]},
+  {"id": "s2", "name": "构建报错，回炉再写", "badge": "错", "desc": "站名太长被拦",
+   "input": "「洗版链怎么跑的？」",
+   "path": [
+    {"st": "ask", "br": "ok"},
+    {"st": "scope", "br": "ok"},
+    {"st": "read", "br": "ok"},
+    {"st": "write", "br": "ok", "form": "站名写了 10 个字"},
+    {"st": "build", "br": "err", "in": [
+     {"st": "parse", "br": "ok"},
+     {"st": "lint", "br": "err", "form": "错误：站名太长"}]},
+    {"st": "write", "br": "ok", "form": "站名改成 4 个字"},
+    {"st": "build", "br": "ok", "form": "页面 240 KB"},
+    {"st": "check", "br": "ok"},
+    {"st": "deliver", "br": "ok"}
+   ]},
+  {"id": "s3", "name": "贴回反馈，改判断", "badge": "反", "desc": "用户说这是问题",
+   "input": "【流程图反馈】…这是问题",
+   "path": [
+    {"st": "paste", "br": "fb", "form": "站 lock · 条目 timeout"},
+    {"st": "locate", "br": "ok", "form": "lock 站 timeout 岔路"},
+    {"st": "verify", "br": "bug", "form": "改成有隐患＋建议"},
+    {"st": "write", "br": "ok", "form": "flow.json 第 2 版"},
+    {"st": "build", "br": "ok"},
+    {"st": "check", "br": "ok"},
+    {"st": "deliver", "br": "ok", "form": "同一链接的新版本"}
+   ]},
+  {"id": "s4", "name": "小改动，不开画布", "badge": "小", "desc": "一句话答完",
+   "input": "「按钮改成蓝色」",
+   "path": [{"st": "ask", "br": "small"}]},
+  {"id": "s5", "name": "没有 Chrome 也交付", "badge": "缺", "desc": "跳过自查",
+   "input": "「这个定时任务怎么跑的？」",
+   "path": [
+    {"st": "ask", "br": "ok"},
+    {"st": "scope", "br": "ok"},
+    {"st": "read", "br": "ok"},
+    {"st": "write", "br": "ok"},
+    {"st": "build", "br": "ok"},
+    {"st": "check", "br": "nochrome", "form": "没自查的页面"},
+    {"st": "deliver", "br": "ok", "form": "附一句「未自查」"}
+   ]}
+ ]
+}

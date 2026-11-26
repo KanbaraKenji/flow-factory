@@ -1,0 +1,593 @@
+{
+ "schema": "flow-factory/0",
+ "title": "四项表达测试",
+ "subtitle": "公共站 · 扇出汇合 · 双入口 · 定时循环 · 样例货为虚构",
+ "summary": {
+  "input": "一个用户请求或一轮定时任务",
+  "output": "账号、成片或接回的会话"
+ },
+ "source": {
+  "rev": "test-20261025"
+ },
+ "lines": [
+  {
+   "id": "reg",
+   "name": "注册线",
+   "via": "gate",
+   "stations": [
+    "form",
+    "code",
+    "acct"
+   ],
+   "product": "users"
+  },
+  {
+   "id": "clip",
+   "name": "出片线",
+   "via": "gate",
+   "per": "每镜一份",
+   "stations": [
+    "cut",
+    "frame",
+    "video",
+    "merge"
+   ],
+   "product": "films"
+  },
+  {
+   "id": "tick",
+   "name": "看门狗",
+   "every": "1 分钟",
+   "trigger": "计划任务每分钟一轮",
+   "stations": [
+    "wake",
+    "steward"
+   ],
+   "product": "back"
+  }
+ ],
+ "stations": {
+  "gate": {
+   "name": "验登录限流",
+   "kind": "gate",
+   "actor": "后端",
+   "does": "每个请求先验登录、再看有没有超频",
+   "input": "请求",
+   "output": "放行的请求",
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "登录有效且没超频",
+     "to": "next",
+     "runs": {
+      "n": 120
+     }
+    },
+    {
+     "k": "deny",
+     "when": "没登录或超频",
+     "to": "end",
+     "end": {
+      "kind": "failed",
+      "label": "返回 401 / 429"
+     },
+     "fault": {
+      "kind": "stop",
+      "user_sees": "页面提示请先登录",
+      "verdict": {
+       "level": "ok",
+       "note": "设计好的拦截，不用管"
+      }
+     },
+     "runs": {
+      "n": 17
+     }
+    }
+   ],
+   "runs": {
+    "n": 137,
+    "last": "10-25 23:5x"
+   }
+  },
+  "form": {
+   "name": "填表",
+   "kind": "in",
+   "does": "收用户名和邮箱",
+   "input": "放行的请求",
+   "output": "注册表单",
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "格式都对",
+     "to": "next",
+     "runs": {
+      "n": 66
+     }
+    },
+    {
+     "k": "bad",
+     "when": "邮箱格式不对",
+     "to": "end",
+     "end": {
+      "kind": "returned",
+      "label": "退回改表"
+     },
+     "fault": {
+      "kind": "human",
+      "user_sees": "表单标红",
+      "verdict": {
+       "level": "ok",
+       "note": "用户自己改，不用管"
+      }
+     },
+     "runs": {
+      "n": 4
+     }
+    }
+   ],
+   "runs": {
+    "n": 70,
+    "last": "10-25 23:5x"
+   }
+  },
+  "code": {
+   "name": "发验证码",
+   "kind": "step",
+   "does": "给邮箱发 6 位码",
+   "input": "注册表单",
+   "output": "待验证的表单",
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "用户填对码",
+     "to": "next",
+     "runs": {
+      "n": 64
+     }
+    }
+   ],
+   "unhandled": {
+    "user_sees": "收不到码",
+    "verdict": {
+     "level": "risk",
+     "note": "发信失败没重试。建议：失败时重发一次并提示"
+    }
+   },
+   "runs": {
+    "n": 66,
+    "last": "10-25 23:5x",
+    "stuck": 2
+   }
+  },
+  "acct": {
+   "name": "建账号",
+   "kind": "out",
+   "does": "写入用户表",
+   "input": "待验证的表单",
+   "output": "新账号",
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "写库成功",
+     "to": "next",
+     "runs": {
+      "n": 64
+     }
+    }
+   ],
+   "unhandled": {
+    "user_sees": "注册转圈",
+    "verdict": {
+     "level": "ok",
+     "note": "写库失败整个请求回滚，不用管"
+    }
+   },
+   "runs": {
+    "n": 64,
+    "last": "10-25 23:5x"
+   }
+  },
+  "cut": {
+   "name": "拆镜",
+   "kind": "step",
+   "does": "把分镜拆成每镜一份",
+   "input": "一版分镜",
+   "output": "6 份镜头单",
+   "split": {
+    "by": "镜",
+    "n": 6
+   },
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "分镜里有镜头",
+     "to": "next",
+     "runs": {
+      "n": 50
+     }
+    }
+   ],
+   "unhandled": {
+    "user_sees": "没有镜头时什么也不出",
+    "verdict": {
+     "level": "ok",
+     "note": "空分镜本来就不该出片"
+    }
+   },
+   "runs": {
+    "n": 50,
+    "last": "10-25 23:5x"
+   }
+  },
+  "frame": {
+   "name": "出首帧",
+   "kind": "ai",
+   "does": "每镜出一张首帧",
+   "input": "镜头单",
+   "output": "首帧图",
+   "modes": [
+    {
+     "id": "script",
+     "name": "脚本",
+     "how": "h3_shot.py 批量",
+     "diff": {
+      "GPU 锁": "先写锁",
+      "一次": "整版每镜",
+      "失败": "自动重出一次"
+     }
+    },
+    {
+     "id": "ui",
+     "name": "界面",
+     "how": "ComfyUI 手点",
+     "diff": {
+      "GPU 锁": "不写锁",
+      "一次": "单张",
+      "失败": "人看着重点"
+     }
+    }
+   ],
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "出图成功",
+     "to": "next",
+     "runs": {
+      "n": 47
+     }
+    },
+    {
+     "k": "oom",
+     "when": "显存被聊天模型占了",
+     "only": "ui",
+     "to": "end",
+     "end": {
+      "kind": "failed",
+      "label": "这一镜出图失败"
+     },
+     "fault": {
+      "kind": "stop",
+      "user_sees": "ComfyUI 报显存不足",
+      "verdict": {
+       "level": "risk",
+       "note": "界面版不写锁，聊天模型不会让路。建议：界面版也走让路钩子"
+      }
+     },
+     "runs": {
+      "n": 3
+     }
+    }
+   ],
+   "runs": {
+    "n": 50,
+    "last": "10-25 23:5x"
+   }
+  },
+  "video": {
+   "name": "出视频",
+   "kind": "ai",
+   "does": "每镜按首帧出视频",
+   "input": "首帧图",
+   "output": "镜头视频",
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "视频出好",
+     "to": "next",
+     "runs": {
+      "n": 46
+     }
+    }
+   ],
+   "unhandled": {
+    "user_sees": "这一镜空着",
+    "verdict": {
+     "level": "risk",
+     "note": "失败的镜没人知道。建议：拼接前检查镜数"
+    }
+   },
+   "runs": {
+    "n": 47,
+    "last": "10-25 23:5x",
+    "stuck": 1
+   }
+  },
+  "merge": {
+   "name": "拼接",
+   "kind": "step",
+   "does": "等齐所有镜，按顺序拼成一条",
+   "input": "6 段镜头视频",
+   "output": "一条成片",
+   "join": {
+    "by": "镜"
+   },
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "镜头齐了",
+     "to": "next",
+     "runs": {
+      "n": 40
+     }
+    },
+    {
+     "k": "short",
+     "when": "少了几镜",
+     "to": "end",
+     "end": {
+      "kind": "blocked",
+      "label": "等补镜"
+     },
+     "fault": {
+      "kind": "human",
+      "user_sees": "成片目录没有新文件",
+      "verdict": {
+       "level": "risk",
+       "note": "少镜时只写日志。建议：少镜时推送提醒"
+      }
+     },
+     "runs": {
+      "n": 0
+     }
+    }
+   ],
+   "runs": {
+    "n": 46,
+    "last": "10-25 23:5x"
+   }
+  },
+  "wake": {
+   "name": "看门狗起跑",
+   "kind": "in",
+   "actor": "看门狗",
+   "does": "每分钟检查名单",
+   "input": "名单里一个对话",
+   "output": "要接回的对话",
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "这个对话没挂上",
+     "to": "next",
+     "runs": {
+      "n": 31
+     }
+    },
+    {
+     "k": "fine",
+     "when": "已经挂上了",
+     "to": "end",
+     "end": {
+      "kind": "done",
+      "label": "这轮不用管"
+     },
+     "runs": {
+      "n": 2849
+     }
+    }
+   ],
+   "unhandled": {
+    "user_sees": "日志里没有这一轮",
+    "verdict": {
+     "level": "ok",
+     "note": "下一分钟会再跑"
+    }
+   },
+   "runs": {
+    "n": 2880,
+    "last": "10-25 23:5x"
+   }
+  },
+  "steward": {
+   "name": "值守接回",
+   "kind": "hand",
+   "actor": "值守会话",
+   "does": "让值守会话把对话接回桌面端",
+   "input": "要接回的对话",
+   "output": "挂上 RC 的对话",
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "接回成功",
+     "to": "next",
+     "runs": {
+      "n": 24
+     }
+    },
+    {
+     "k": "retry",
+     "when": "没接上，还没试满 3 次",
+     "to": "again",
+     "count": {
+      "name": "值守尝试",
+      "max": 3
+     },
+     "fault": {
+      "kind": "retry",
+      "user_sees": "手机上暂时看不到这个对话",
+      "verdict": {
+       "level": "ok",
+       "note": "下一分钟再试，不用管"
+      }
+     },
+     "runs": {
+      "n": 6
+     }
+    },
+    {
+     "k": "giveup",
+     "when": "试满 3 次还没接上",
+     "to": "end",
+     "end": {
+      "kind": "blocked",
+      "label": "放手，后台兜底"
+     },
+     "fault": {
+      "kind": "degrade",
+      "user_sees": "对话由后台托管",
+      "verdict": {
+       "level": "risk",
+       "note": "桌面端看不到这几轮。建议：放手时推送一次"
+      }
+     },
+     "runs": {
+      "n": 1
+     }
+    }
+   ],
+   "runs": {
+    "n": 31,
+    "last": "10-25 23:5x"
+   }
+  }
+ },
+ "products": [
+  {
+   "id": "users",
+   "name": "用户表",
+   "desc": "新注册的账号"
+  },
+  {
+   "id": "films",
+   "name": "成片目录",
+   "desc": "拼好的成片"
+  },
+  {
+   "id": "back",
+   "name": "已接回",
+   "desc": "手机能连上的对话"
+  }
+ ],
+ "samples": [
+  {
+   "id": "s1",
+   "name": "新用户注册",
+   "badge": "注",
+   "desc": "一次过",
+   "input": "注册请求",
+   "path": [
+    {
+     "st": "gate",
+     "br": "ok"
+    },
+    {
+     "st": "form",
+     "br": "ok",
+     "form": "注册表单"
+    },
+    {
+     "st": "code",
+     "br": "ok"
+    },
+    {
+     "st": "acct",
+     "br": "ok",
+     "form": "新账号"
+    }
+   ]
+  },
+  {
+   "id": "s2",
+   "name": "出一条短片",
+   "badge": "片",
+   "desc": "6 镜，界面版手点首帧",
+   "input": "出片请求：分镜 B",
+   "path": [
+    {
+     "st": "gate",
+     "br": "ok"
+    },
+    {
+     "st": "cut",
+     "br": "ok",
+     "form": "6 份镜头单"
+    },
+    {
+     "st": "frame",
+     "br": "ok",
+     "mode": "ui",
+     "form": "6 张首帧"
+    },
+    {
+     "st": "video",
+     "br": "ok",
+     "form": "6 段视频"
+    },
+    {
+     "st": "merge",
+     "br": "ok",
+     "form": "一条成片"
+    }
+   ]
+  },
+  {
+   "id": "s3",
+   "name": "接回两次失败",
+   "badge": "接",
+   "desc": "第 3 轮才接上",
+   "input": "对话「AI 视频规划」",
+   "path": [
+    {
+     "st": "wake",
+     "br": "ok"
+    },
+    {
+     "st": "steward",
+     "br": "retry"
+    },
+    {
+     "st": "wake",
+     "br": "ok"
+    },
+    {
+     "st": "steward",
+     "br": "retry"
+    },
+    {
+     "st": "wake",
+     "br": "ok"
+    },
+    {
+     "st": "steward",
+     "br": "ok",
+     "form": "挂上 RC 的对话"
+    }
+   ]
+  }
+ ],
+ "runs": {
+  "from": "10-24 00:00",
+  "to": "10-25 23:59",
+  "total": 137,
+  "note": "测试数据：虚构的运行次数"
+ }
+}
