@@ -1144,7 +1144,7 @@ function routeAll(){
 }
 /* 组的分叉与汇合：进组的带子在离卡 GBUS 处分成几股、各自接进一方的卡；几方出来的几股在离卡 GBUS 处并成一股接着走。
    分叉 / 汇合那一竖段贴着卡走（通道里的道位离卡至少 20，不会撞上别的带子） */
-function groupLegs(){ EDGES.forEach(e=>{ e.legs=null; e.gin=e.gout=e.gx=null; });
+function groupLegs(){ EDGES.forEach(e=>{ e.legs=null; e.gin=e.gout=e.gx=null; e.rstub=e.rrep=e.rtrunk=null; });
   Object.keys(GRP).forEach(gid=>{ const g=N[gid]; if(!g||!g.grp) return;
     /* 出组的带子：线上那一条（去组后面那一站）带几股汇合；pass 去别处的几条从汇合点接出去（不再各自分股）；组自己的岔路从框底出去，不动 */
     const nx=nextOf(gid), prim=EDGES.find(e=>e.a===gid&&e.b===nx&&!e.gbe&&e.pts&&e.pts.length>=2)||EDGES.find(e=>e.a===gid&&!e.gbe&&e.pts&&e.pts.length>=2);
@@ -1154,7 +1154,18 @@ function groupLegs(){ EDGES.forEach(e=>{ e.legs=null; e.gin=e.gout=e.gx=null; })
       if(e.b===gid){ const p=e.pts.map(q=>q.slice()), z=p[p.length-1], L=z[0]<g.x, ex=L?g.x-g.w/2:g.x+g.w/2, xb=ex+(L?-GBUS:GBUS);
         p[p.length-1]=[xb,z[1]]; e.pts=p; e.gin=gid; e.legs=g.members.map(m=>{ const n=N[m]; return {m,pts:Math.abs(n.y-z[1])<.5?[[xb,z[1]],[ex,n.y]]:[[xb,z[1]],[xb,n.y],[ex,n.y]]}; }); }
       else if(e.a===gid){ const p=e.pts.map(q=>q.slice()), z=p[0], R=z[0]>g.x, ex=R?g.x+g.w/2:g.x-g.w/2, xb=ex+(R?GBUS:-GBUS);
-        p[0]=[xb,z[1]]; e.pts=p; e.gout=gid; e.legs=g.members.map(m=>{ const n=N[m]; return {m,pts:Math.abs(n.y-z[1])<.5?[[ex,n.y],[xb,z[1]]]:[[ex,n.y],[xb,n.y],[xb,z[1]]]}; }); } }); }); }
+        p[0]=[xb,z[1]]; e.pts=p; e.gout=gid; e.legs=g.members.map(m=>{ const n=N[m]; return {m,pts:Math.abs(n.y-z[1])<.5?[[ex,n.y],[xb,z[1]]]:[[ex,n.y],[xb,n.y],[xb,z[1]]]}; }); } }); 
+    /* 几方不通过、去同一站的那几条合成一条（11-27 用户同意「三方审核共用退回路线」）：
+       沿第一段竖线走得最远的那一方的路线当主干原样画；其余几方从自己的卡横着接到主干那条竖线上，只画这一小段接线（键帽挂在这一段上，看得出是谁）；
+       货仍沿各自完整的路线走（接线 + 主干）。几条出卡方向不同、或第一段不是「横出去再竖着走」的，不合，照旧各画各的 */
+    const byB={}; EDGES.forEach(e=>{ if(MEM[e.a]!==gid||e.gbe||!e.pts||e.pts.length<3) return; const k=e.b+'|'+e.kind; (byB[k]=byB[k]||[]).push(e); });
+    Object.values(byB).forEach(es=>{ if(es.length<2) return;
+      const side=e=>Math.sign(e.pts[1][0]-e.pts[0][0]), vd=e=>Math.sign(e.pts[2][1]-e.pts[1][1]), ok=e=>side(e)&&vd(e)&&Math.abs(e.pts[0][1]-e.pts[1][1])<.5&&Math.abs(e.pts[1][0]-e.pts[2][0])<.5;
+      const c=es.filter(ok), s0=c.length?side(c[0]):0, cs=c.filter(e=>side(e)===s0); if(cs.length<2) return;
+      const d0=cs.filter(e=>vd(e)>0).length>=cs.filter(e=>vd(e)<0).length?1:-1, same=cs.filter(e=>vd(e)===d0);   /* 多数往哪拐就沿哪边走；往另一边绕的那几方改接到主干上 */
+      const rep=same.reduce((a,e)=>(e.pts[0][1]-a.pts[0][1])*d0>0?e:a), xl=rep.pts[1][0], jy=rep.pts[1][1], bun=cs.filter(e=>e===rep||(e.pts[0][1]-jy)*d0<0);
+      if(bun.length<2) return;
+      rep.rtrunk=bun; bun.forEach(e=>{ if(e===rep) return; const y=e.pts[0][1]; e.rstub=[e.pts[0],[xl,y],[xl,jy]]; e.pts=[e.pts[0],[xl,y],[xl,jy]].concat(rep.pts.slice(2)); e.rrep=rep; }); }); }); }
 function dOf(p,r=14){ if(!p||!p.length) return ''; let d='M'+p[0][0]+' '+p[0][1];
   for(let i=1;i<p.length-1;i++){ const a=p[i-1],b=p[i],c=p[i+1]; const l1=Math.hypot(b[0]-a[0],b[1]-a[1]), l2=Math.hypot(c[0]-b[0],c[1]-b[1]); if(!l1||!l2){ d+=' L'+b[0]+' '+b[1]; continue; }
     const k=Math.min(r,l1/2,l2/2); d+=` L${b[0]-(b[0]-a[0])/l1*k} ${b[1]-(b[1]-a[1])/l1*k} Q${b[0]} ${b[1]} ${b[0]+(c[0]-b[0])/l2*k} ${b[1]+(c[1]-b[1])/l2*k}`; }
@@ -1282,17 +1293,19 @@ function storeSvg(t){ const n=N['T:'+t.id], x0=n.x-SW/2, y0=n.y-SH/2; const nm=w
 function runsOf(e){ if(VIA(e.a).length&&S[e.b]&&S[e.b].runs) return S[e.b].runs.n||0; /* 公共站分进各线：按那条线入口站的进站数 */
   let n=0, has=false; e.brs.forEach(b=>{ if(b.runs){ has=true; n+=b.runs.n||0; } }); if(!has&&!e.brs.length&&S[e.a]&&S[e.a].runs){ has=true; n=S[e.a].runs.n||0; } return has?n:null; }
 let RUNL=[];
-function runBelt(e){ const n=runsOf(e), mx=Math.max(1,...EDGES.map(x=>runsOf(x)||0)), d=dOf(e.pts), lc=colorOf(e.a);
+function runBelt(e){ const n=runsOf(e), mx=Math.max(1,...EDGES.map(x=>runsOf(x)||0)), d=dOf(e.rstub||e.pts), lc=colorOf(e.a);
   const last=e.pts[e.pts.length-1], prev=e.pts[e.pts.length-2], ang=Math.atan2(last[1]-prev[1],last[0]-prev[0])*180/Math.PI;
   const cap=routeBeltW(e), w=n==null?2:n?Math.min(cap,3+(cap-3)*Math.log10(1+n)/Math.log10(1+mx)):3, lab=n==null?'':String(n); let q=polyAt(e.pts,.5);   /* 最粗不超过布线时留的宽度，相邻两条之间的空隙才保得住 */
   if(lab){ for(const t of [.5,.35,.65,.22,.78]){ q=polyAt(e.pts,t); if(!RUNL.some(z=>Math.abs(z[0]-q[0])<txtW(lab,11)+20&&Math.abs(z[1]-q[1])<20)) break; } RUNL.push(q); }
   return `<g class="eg rn${n===0?' zero':''}${n==null?' nil':''}" style="--lc:${lc}" data-a="${esc(e.a)}" data-b="${esc(e.b)}"><title>${esc(e.brs.map(b=>b.when).join('；'))}${n!=null?'：走过 '+n+' 次':'：没有记录'}</title><path class="belt run" style="stroke-width:${w.toFixed(1)}" d="${d}"/>${(e.legs||[]).map(l=>`<path class="belt run" style="stroke-width:${Math.min(w,4).toFixed(1)}" d="${dOf(l.pts,8)}"/>`).join('')}<path class="arw" transform="translate(${last[0]} ${last[1]}) rotate(${ang})" d="M0 0 L-11 -6 L-11 6 Z"/>${lab?`<g class="rcnt"><rect x="${q[0]-txtW(lab,11)/2-7}" y="${q[1]-9}" width="${txtW(lab,11)+14}" height="18" rx="9"/><text x="${q[0]}" y="${q[1]+4}" text-anchor="middle">${lab}</text></g>`:''}</g>`; }
-function beltSvg(e,PS){ if(!e.pts) return ''; if(st.view==='run') return runBelt(e); const d=dOf(e.pts), lc=colorOf(e.a);
+function beltSvg(e,PS){ if(!e.pts) return ''; if(st.view==='run') return runBelt(e); const d=dOf(e.rstub||e.pts), lc=colorOf(e.a);
   const last=e.pts[e.pts.length-1], prev=e.pts[e.pts.length-2], ang=Math.atan2(last[1]-prev[1],last[0]-prev[0])*180/Math.PI;
   const arw=`<path class="arw${e.kind==='back'?' b':''}" transform="translate(${last[0]} ${last[1]}) rotate(${ang})" d="M0 0 L-11 -6 L-11 6 Z"/>`;
   const rt=RT.path&&RT.path.some((x,i)=>(x===e.a||x===MEM[e.a])&&RT.path[i+1]===e.b)?' rt':'';
   const dc=st.cur==='drill'&&!DRILL.done&&DRILL.path.length?drillCur():null, nx=dc&&!dc.br&&e.a===dc.st?' nx':'';   /* 演练：下一步可选的那几条也流 */
-  const on=(PS.E.has(e.a+'>'+e.b)?' on':'')+rt+nx+(FZ&&(e.a===st.selS||e.b===st.selS)?' fh':''), tip=e.brs.length?e.brs.map(b=>b.when).join('；'):'', fh='';
+  const hit=x=>PS.E.has(x.a+'>'+x.b), grp=e.rtrunk||[e];
+  const on=(grp.some(hit)?' on':'')+rt+nx+(FZ&&grp.some(x=>x.a===st.selS||x.b===st.selS||MEM[x.a]===st.selS)?' fh':''), tip=(e.rtrunk?e.rtrunk.flatMap(x=>x.brs.map(b=>(S[x.a].actor||S[x.a].name)+'：'+b.when)):e.brs.map(b=>b.when)).join('；'), fh='';
+  if(e.rstub) return `<g class="eg j${on}" style="--lc:${lc}" data-a="${esc(e.a)}" data-b="${esc(e.b)}"><title>${esc(tip)}；和其余几方共用一条回「${esc((S[e.b]||{}).name||e.b)}」</title><path class="belt ${e.kind==='back'?'back':'jump'}" d="${d}"/></g>`;
   if(e.legs) return grpBelt(e,on,lc,d,arw,!!e.gout&&!PS.E.has(e.a+'>'+e.b)&&EDGES.some(x=>x.gx===e.gout&&PS.E.has(x.a+'>'+x.b)));
   if(e.kind==='main'||e.kind==='out') return `<g class="eg m${on}${e.multi?' mu':''}" style="--lc:${lc}" data-a="${esc(e.a)}" data-b="${esc(e.b)}">${e.multi?'<title>这一段是分成很多份各自在走</title>':''}<path class="belt main" d="${d}"/><path class="belt mainc" d="${d}"/>${fh}${arw}</g>`;
   return `<g class="eg j${on}${e.again?' ag':''}${S[e.a]&&S[e.a].decide&&e.kind!=='back'?' eq':''}" style="--lc:${lc}" data-a="${esc(e.a)}" data-b="${esc(e.b)}"${e.gbe?' data-gb="1"':''}><title>${esc(e.again?'下一轮从线头再来：'+tip:tip)}</title><path class="belt ${e.kind==='back'?'back':'jump'}" d="${d}"/>${fh}${arw}</g>`; }
