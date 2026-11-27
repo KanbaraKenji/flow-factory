@@ -271,6 +271,7 @@ svg.routing .eg:not(.rt){opacity:.06!important} .eg.rt{opacity:1!important} .eg.
 .so:hover{background:var(--well)} .so.on{background:var(--pri-tint);box-shadow:inset 3px 0 0 var(--pri)}
 .so .nm{font-weight:600} .so .s2{grid-column:2/4;font-size:11.5px;color:var(--tx3)}
 .board{position:absolute;left:50%;bottom:62px;transform:translateX(-50%);z-index:12;width:min(460px,calc(100% - 20px));max-height:min(440px,calc(100% - 90px));overflow:auto;background:var(--solid);border:1.5px solid var(--pri);border-radius:14px;box-shadow:var(--shadow);padding:10px;display:grid;gap:6px}
+.side .board{position:static;left:auto;bottom:auto;transform:none;width:auto;max-height:46vh;flex:none;border:0;border-bottom:1px solid var(--line2);border-radius:14px 14px 0 0;box-shadow:none;margin:0}
 .board .bh{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:0 2px 2px} .board .bh b{font-size:14px} .board .hint{font-size:11.5px;color:var(--tx3)}
 .bo{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;text-align:left;border:1px solid var(--line);background:var(--solid);border-radius:10px;padding:7px 10px 7px 7px;cursor:pointer;color:var(--tx);font-size:13px}
 .bo:hover,.bo:focus-visible{border-color:var(--pri);box-shadow:0 0 0 1px var(--pri) inset;outline:none}
@@ -471,6 +472,7 @@ svg.lnhl #world .eg.lh .belt.main{stroke-opacity:.8!important} svg.lnhl #world .
 @keyframes rowIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .side.open{animation:rowIn var(--t-m) var(--ease-out)} .smpop:not([hidden]),.help:not([hidden]){animation:rowIn .3s var(--ease-out)}
 @media (max-width:1099px){ .side{position:fixed;left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:60vh;z-index:50} }
+@media (max-width:1099px){ .side .board:not([hidden])~.tabs,.side .board:not([hidden])~.sbody{display:none} .side .board{max-height:none;border-radius:14px;border-bottom:0} }   /* 手机：等你选路时底部面板只放选项板，免得把画面挤没 */
 @media (max-width:700px){
   .nav{width:112px;bottom:60px} .mm{height:84px}
   .smp .st,.smp .nm{display:none} .smp{flex:0 0 auto;min-width:48px}
@@ -1717,13 +1719,17 @@ function spdPop(open){ const p=$('#spdPop'), b=$('#spdBtn'); if(!p||!b) return; 
   const cv=$('#cv').getBoundingClientRect(), r=b.getBoundingClientRect(); p.style.left=Math.max(8,Math.min(cv.width-p.offsetWidth-8,r.left-cv.left+r.width/2-p.offsetWidth/2))+'px'; }
 function stop(){ clearTimeout(st.timer); st.timer=null; clearTimeout(st.next); renderStat(); }
 /* 换一件货：回到入口，镜头推过去，稍停再开演 */
-function playFrom(id,entry){ if(OFFER) clearOffer(); AFTERMOVE=null; NEXTEASE=null; TRL=[]; TRC=[]; FOL=[];
+function playFrom(id,entry){ if(OFFER) clearOffer(); if(id!=='drill') boardDone(); AFTERMOVE=null; NEXTEASE=null; TRL=[]; TRC=[]; FOL=[];
   if(id==='drill'&&!entry){ const E=entries(); if(E.length>1){ stop(); st.cur='drill'; st.beat=0; DRILL.path=[]; DRILL.done=false; showBoard(`<div class="bh"><b>演练：从哪个入口开始？</b><button type="button" class="lnk" data-exitdrill="1">退出演练</button></div>`+E.map((e,i)=>`<button type="button" class="bo" data-entry="${esc(e)}"><kbd>${i+1}</kbd><span>${esc(S[e].name)}</span><span class="to">${esc(LINE_OF[e]?LINE_OF[e].L.name:'')}</span></button>`).join('')); renderSmp(); return; } entry=E[0]; }
   hideBoard(); if(id==='drill'){ DRILL.path=[{st:entry,br:null}]; DRILL.done=false; }
   stop(); st.cur=id; st.beat=0; st.follow=true; const q=slotAt(0); TK.x=q.x; TK.y=q.y; buildWorld(); drawToks(); renderStat(); renderSmp(); if(st.tab==='cargo') renderSide();
   if(st.follow){ st.userCam=false; if(LSTACK.length){ if(!boxTween.raf){ const [fx,fy,fk]=fitT(); camTo(fx,fy,fk,500); } } else { const n=N[C().path[0].st], r=cvR(), k=focusK(); camTo(Math.max(24+railW(),(r.width-sideW())*.12)-(n.x-CW/2)*k,(r.height-56)*.45-n.y*k,k,800); } }
   clearTimeout(st.next); st.next=setTimeout(()=>{ if(st.cur===id&&!st.timer) start(); },LSTACK.length?250:950); }
-function showBoard(html){ const b=$('#board'); b.innerHTML=html; b.hidden=false; }
+/* 演练的选项板放进右侧栏顶上（11-27 用户：放在画面中下部分挡主画面）。侧栏本来关着就为它打开，离开演练时再关上；手机上侧栏是底部面板，选项板在面板最上面 */
+function showBoard(html){ const b=$('#board'), sd=$('#side'); if(b.parentNode!==sd) sd.insertBefore(b,sd.firstChild);
+  if(!sd.classList.contains('open')){ st.sideByBoard=true; if(!$('#sbody').innerHTML.trim()) renderSide(); openSide(); }
+  b.innerHTML=html; b.hidden=false; b.scrollIntoView&&b.scrollIntoView({block:'nearest'}); }
+function boardDone(){ if(st.sideByBoard){ st.sideByBoard=false; closeSide(); } }
 function hideBoard(){ const b=$('#board'); if(b){ b.hidden=true; b.innerHTML=''; } const w=$('#sw'); if(w) w.innerHTML=''; previewPick(null); askOff(); }
 function drillCur(){ return DRILL.path[DRILL.path.length-1]; }
 function drillAsk(){ const last=drillCur(), s0=S[last.st]; if(!s0) return;
@@ -1739,11 +1745,12 @@ function drillAsk(){ const last=drillCur(), s0=S[last.st]; if(!s0) return;
 function askMark(id){ const fx=$('#fx'), n=N[id]; askOff(); if(!fx||!n) return; const q=nbox(n), pd=n.grp?GBUS+11:0, x0=q[0]-pd, y0=q[1], bw=q[2]-q[0]+2*pd, bh=q[3]-q[1];
   fx.insertAdjacentHTML('beforeend',`<rect id="askbx" class="askbx" x="${x0}" y="${y0}" width="${bw}" height="${bh}" rx="${n.grp?16:11}"/><g id="askm" class="askm" transform="translate(${x0} ${y0})"><circle class="askr" r="11"/><circle class="askc" r="11"/><text y="5" text-anchor="middle">!</text></g>`); }
 function askOff(){ ['#askm','#askbx'].forEach(q=>{ const e=$(q); if(e) e.remove(); }); }
-function keepAboveBoard(id){ const n=N[id], bd=$('#board'); if(!n||!bd||bd.hidden) return; const r=cvR(), b=bd.getBoundingClientRect();
-  if(n.grp){ /* 组：整个框（连同各方退回的键帽）放进选项板上方那一块，放不下就缩小 */ const q=nbox(n), top=16, bot=b.top-r.top-16, need=q[3]-q[1], cx=(q[0]+q[2])/2, sx=cx*cam.k+cam.x;
-    const k=Math.min(cam.k,Math.max(.3,(bot-top)/need));
-    if(q[1]*cam.k+cam.y<top-2||q[3]*cam.k+cam.y>bot+2){ st.follow=false; renderStat(); camTo(sx-cx*k,(top+bot)/2-(q[1]+q[3])/2*k,k,350); } return; }
-  const bottom=(nbox(n)[3]+120)*cam.k+cam.y+r.top; if(bottom>b.top-8){ st.follow=false; renderStat(); camTo(cam.x,cam.y-(bottom-(b.top-8)),cam.k,350); } }
+function keepAboveBoard(id){ const n=N[id], bd=$('#board'); if(!n||!bd||bd.hidden) return; const r=cvR(), sd=$('#side'), sr=sd.getBoundingClientRect(), wide=matchMedia('(min-width:1100px)').matches, open=sd.classList.contains('open');
+  /* 空地：左边让开线路图，右边让开右侧栏（宽屏），下边让开播放栏或手机底部面板 */
+  const L=railW()+16, Rt=(wide&&open?sr.left-r.left:r.width)-16, T=16, B=(!wide&&open?sr.top-r.top:r.height-70)-16;
+  const q=nbox(n), box=n.grp?q:[q[0],q[1],q[2],q[3]+(st.cur==='drill'?60:0)], k=Math.min(cam.k,Math.max(.3,Math.min((Rt-L)/(box[2]-box[0]),(B-T)/(box[3]-box[1]))));
+  const sx0=box[0]*k+cam.x, sx1=box[2]*k+cam.x, sy0=box[1]*k+cam.y, sy1=box[3]*k+cam.y;
+  if(k<cam.k-1e-3||sx0<L-2||sx1>Rt+2||sy0<T-2||sy1>B+2){ st.follow=false; renderStat(); const cx=(box[0]+box[2])/2, cy=(box[1]+box[3])/2; camTo((L+Rt)/2-cx*k,(T+B)/2-cy*k,k,350); } }
 /* 扳道岔：每条岔路离路口固定距离处挂一个数字键帽，压在线上；停在本站的结局从卡底伸出短线挂键帽。键帽靠得太近就沿线错开 */
 function swFrom(s0,b){ return b&&b.gm?b.gm:s0.id; }   /* 组里一方的岔路：从那一方的卡出发 */
 /* 这条岔路画在哪条带子上：组自己的岔路只认从框底出去的那几条（gbe），其余不认它们 */
@@ -1804,7 +1811,7 @@ function drillCopy(){ const c=drillSample(); const out={id:'s_'+c.id,name:c.name
   const ok=()=>toast('已复制，贴回和 AI 的对话就能加进图里');
   const bad=()=>{ showBoard(`<div class="bh"><b>浏览器没让自动复制：文字已选中，按 Ctrl+C</b></div><textarea class="fbt" id="drillOut" rows="8" readonly>${esc(txt)}</textarea><div class="bf"><button type="button" class="lnk" data-redrill="1">再演练一次</button><button type="button" class="lnk" data-exitdrill="1">退出演练</button></div>`); const t=$('#drillOut'); t.focus(); t.select(); };
   try{ if(navigator.clipboard&&window.isSecureContext) navigator.clipboard.writeText(txt).then(ok,bad); else bad(); }catch(e){ bad(); } }
-function exitDrill(){ hideBoard(); while(LSTACK.length&&LSTACK[LSTACK.length-1].mode==='drill') exitInner({instant:true}); hideBoard(); playFrom(SAMPLES[0]?SAMPLES[0].id:pool()[0].id); }
+function exitDrill(){ hideBoard(); boardDone(); while(LSTACK.length&&LSTACK[LSTACK.length-1].mode==='drill') exitInner({instant:true}); hideBoard(); playFrom(SAMPLES[0]?SAMPLES[0].id:pool()[0].id); }
 /* ════════ 站内流程：盒中盒（照 2026-10-18 洗版样机的做法） ════════
    站卡就是门：镜头连续推进那张卡，卡的边框变成墙，站内流程画在墙里；外层淡化后留在四周、原样不动（是进去那一刻的快照）。
    左墙是入口（从外面哪几站进来），底墙一排出口门，每扇门对应外面一条岔路，站内的出口岔路接到对应的门上。

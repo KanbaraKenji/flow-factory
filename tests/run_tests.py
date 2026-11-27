@@ -85,7 +85,7 @@ def main():
             # （参数, 期望退出码, 输出里要有的字）：汇报配色、链接直达演练、传错参数报错、超时以失败退出
             cases = [([], 0, ''), (['--size', '390x844'], 0, ''), (['--theme', 'dark'], 0, ''), (['--view', 'fault'], 0, ''),
                      (['--skin', 'report'], 0, '"calm":true'), (['--hash', 'skin.report~drill~speed.0.75'], 0, '"skin":"report"'),
-                     (['--beat', '3', '--sample', 's1'], 0, ''), (['--sampel', 's1'], 2, '不认识的参数'), (['--timeout', '1'], 3, '超时')]
+                     (['--beat', '3', '--sample', 's1'], 0, ''), (['--sampel', 's1'], 2, '不认识的参数'), (['--timeout', '1'], 3, '超时'), (['--drill', 'receive:ok'], 0, '演练：receive:ok')]
             for extra, want, has in cases:
                 r = subprocess.run([node, CHECK, out, *extra], capture_output=True, text=True, encoding='utf-8', errors='replace')
                 txt = r.stdout + r.stderr
