@@ -103,6 +103,15 @@ def main():
                 print(('  通过  ' if good else '  不符  ') + f'无头 会签组 {" ".join(extra)}：{" ".join(r.stdout.strip().splitlines()[-2:])}')
                 if not good:
                     fails.append('headless group ' + ' '.join(extra))
+            # 组的 pass（都通过后去别处）与组自己的岔路（整张单撤回）：停在框底、故障视图框底小标、演练
+            gp = os.path.join(tmp, 'group_pass.html')
+            run_build(os.path.join(FIX, 'ok_group_pass_and_withdraw.json'), '-o', gp)
+            for extra in (['--sample', 's3', '--beat', '3'], ['--sample', 's2', '--beat', '5', '--skin', 'report'], ['--view', 'fault', '--station', 'approve'], ['--hash', 'drill=1', '--size', '390x844']):
+                r = subprocess.run([node, CHECK, gp, *extra], capture_output=True, text=True, encoding='utf-8', errors='replace')
+                good = r.returncode == 0 and '"fail":[]' in r.stdout
+                print(('  通过  ' if good else '  不符  ') + f'无头 会签组 pass / 撤回 {" ".join(extra)}：{" ".join(r.stdout.strip().splitlines()[-2:])}')
+                if not good:
+                    fails.append('headless group pass ' + ' '.join(extra))
     shutil.rmtree(tmp, ignore_errors=True)
     print(f'\n{len(fails)} 项不符' if fails else '\n全部通过')
     return 1 if fails else 0
