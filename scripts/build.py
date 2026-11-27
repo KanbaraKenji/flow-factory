@@ -24,17 +24,25 @@ KEYS = {
     'inner': {'lines', 'stations', 'layout', 'samples', 'groups'},
     'branch': {'k', 'when', 'to', 'end', 'exit', 'fault', 'writes', 'runs', 'count', 'only', 'head'},
     'sample': {'id', 'name', 'badge', 'desc', 'input', 'path'},
-    'step': {'st', 'br', 'form', 'in', 'mode', 'n', 'each'},
-    'group': {'id', 'name', 'mode', 'stations', 'on_return'},
+    'step': {'st', 'br', 'form', 'in', 'mode', 'n', 'each', 'pass'},
+    'group': {'id', 'name', 'mode', 'stations', 'on_return', 'pass', 'branches'},
 }
 ON_RETURN = {'others_continue', 'others_stop'}
 
 
 def group_tools(G, S):
     """会签组（几方同时处理、都通过才往下）的公共算法，校验、数路线、样例货都用它。
-    组在路线里是一步：都通过 = 'all'；跳过某个可选成员 = 'all~成员'；某一方没通过 = '成员:岔路 k'（几方同时没通过时按组里的顺序取第一个）。"""
+    组在路线里是一步：都通过 = 'all'；跳过某个可选成员 = 'all~成员'；某一方没通过 = '成员:岔路 k'（几方同时没通过时按组里的顺序取第一个）。
+    组写了 pass（都通过后按情况去不同地方，11-27）：都通过带上「/pass 的 k」，'all/again'、'all~ie/again'；
+    组自己的岔路（branches：整张单的去向，不是哪一方的结论）就用它的 k，'withdraw'。"""
     def members(gid):
         return [m for m in (G[gid].get('stations') or []) if m in S]
+
+    def passes(gid):
+        return [p for p in (G[gid].get('pass') or []) if isinstance(p, dict) and p.get('k')] if isinstance(G[gid].get('pass'), list) else []
+
+    def gbrs(gid):
+        return [b for b in (G[gid].get('branches') or []) if isinstance(b, dict) and b.get('k')] if isinstance(G[gid].get('branches'), list) else []
 
     def pass_br(m):
         brs = S[m].get('branches') or []
@@ -47,35 +55,45 @@ def group_tools(G, S):
         brs = S[m].get('branches') or []
         return S[m].get('default') or (brs[0].get('k') if brs else None)
 
+    def all_br(k, when, ps, sk):
+        """都通过：没写 pass 就一条（去线上下一站）；写了 pass 每种情况一条，去向按那一项"""
+        if not ps:
+            return [{'k': k, 'when': when, 'to': 'next', 'skip': sk}]
+        return [dict(p, k=k + '/' + p['k'], when=when + ' · ' + str(p.get('when') or p['k']), to=p.get('to', 'next'), skip=sk, pk=p['k']) for p in ps]
+
     def branches(gid):
-        """组的「岔路」：都通过、跳过某个可选成员后都通过、每一方每条不通过的岔路各一条"""
-        ms = members(gid)
-        out = [{'k': 'all', 'when': '都通过', 'to': 'next'}]
+        """组的「岔路」：都通过（写了 pass 按情况分几条）、跳过某个可选成员后都通过、每一方每条不通过的岔路各一条、组自己的岔路"""
+        ms, ps = members(gid), passes(gid)
+        out = all_br('all', '都通过', ps, [])
         for m in ms:
             if S[m].get('optional'):
-                out.append({'k': 'all~' + m, 'when': '都通过（跳过 ' + str(S[m].get('actor') or S[m].get('name') or m) + '）', 'to': 'next', 'skip': [m]})
+                out += all_br('all~' + m, '都通过（跳过 ' + str(S[m].get('actor') or S[m].get('name') or m) + '）', ps, [m])
         for m in ms:
             for b in S[m].get('branches') or []:
                 if b.get('to', 'next') != 'next':
                     out.append(dict(b, k=f'{m}:{b.get("k")}', gm=m, gb=b.get('k')))
+        out += [dict(b, gbr=True) for b in gbrs(gid)]
         return out
 
     def each_of(gid, p):
-        """这一步每一方走哪条（'skip' = 跳过）：写了 each 按 each（没写的成员走它的 default）；只有 br 时按 br 推"""
+        """这一步每一方走哪条（'skip' = 跳过）：写了 each 按 each（没写的成员走它的 default）；只有 br 时按 br 推；组自己的岔路 = 几方都没有结论（None）"""
         ms = members(gid)
         ev = p.get('each')
         if isinstance(ev, dict):
             pick = lambda v: v.get('br') if isinstance(v, dict) else v if isinstance(v, str) else None
             return {m: (pick(ev[m]) if m in ev else def_br(m)) for m in ms}
         k = str(p.get('br') or 'all')
+        if k in [b['k'] for b in gbrs(gid)]:
+            return {m: None for m in ms}
+        k = k.split('/')[0]
         if k == 'all' or k.startswith('all~'):
             sk = k.split('~')[1:]
             return {m: ('skip' if m in sk else pass_br(m)) for m in ms}
         dm, _, dk = k.partition(':')
         return {m: (dk if m == dm else pass_br(m)) for m in ms}
 
-    def decide(gid, ev):
-        """几方的结果 → 货往哪走：返回组这一步的岔路（形同 branches() 里的一条）"""
+    def decide(gid, ev, pk=None):
+        """几方的结果 → 货往哪走：返回组这一步的岔路（形同 branches() 里的一条）。都通过且组写了 pass 时按 pk 挑（没给就取第一项；给错了返回 None）"""
         for m in members(gid):
             v = ev.get(m)
             if v in (None, 'skip'):
@@ -84,9 +102,13 @@ def group_tools(G, S):
             if b and b.get('to', 'next') != 'next':
                 return dict(b, k=f'{m}:{v}', gm=m, gb=v)
         sk = [m for m in members(gid) if ev.get(m) == 'skip']
+        ps = passes(gid)
+        if ps:
+            p = next((x for x in ps if x['k'] == pk), None) if pk is not None else ps[0]
+            return all_br('all' + ''.join('~' + m for m in sk), '都通过', [p], sk)[0] if p else None
         return {'k': 'all' + ''.join('~' + m for m in sk), 'to': 'next'}
 
-    return members, branches, each_of, decide
+    return members, branches, each_of, decide, passes, gbrs
 CODEY = re.compile(r'(\w+\(\)|_\w+_|==|!=|->|\bNone\b|\bnull\b|\btrue\b|\bfalse\b|\breturn\b|\[\w+\]|\w+\.\w+\(|^\w+_\w+$)')
 
 
@@ -200,7 +222,7 @@ def validate(d, ctx=None):
             E(f'组 id「{gid}」重复')
             continue
         G[gid] = g
-    members, gbranches, each_of, decide = group_tools(G, S)
+    members, gbranches, each_of, decide, gpasses, gbrs = group_tools(G, S)
     prods = {p['id'] for p in d.get('products') or []}
     stores = {t['id'] for t in (ctx['stores'] if ctx else d.get('stores', []))}
     pks = [b.get('k') for b in (ctx['parent'].get('branches') or [])] if ctx else []
@@ -273,6 +295,28 @@ def validate(d, ctx=None):
                 E(gw + f' 的成员「{m}」没有 to: "next" 的岔路：这一方永远通不过，组也永远走不下去')
         if all(S.get(m, {}).get('optional') for m in ms if m in S):
             W(gw + ' 的每一方都写了 optional：可能一方都不在')
+        # 都通过后按情况去不同地方（pass），整张单的去向（branches）：11-27。去向（to / end / fault）在下面和站的岔路一起查
+        for key, lab in (('pass', '都通过以后按情况去哪（pass）'), ('branches', '整张单的去向（branches）')):
+            v = g.get(key)
+            if v is None:
+                continue
+            if not isinstance(v, list) or not v:
+                E(gw + f' 的 {key} 要写成 [{{"k", "when", "to"}}, ...]：{lab}')
+                continue
+            seen = set()
+            for b in v:
+                if not isinstance(b, dict) or not b.get('k'):
+                    E(gw + f' 的 {key} 里每一项要有 k（还有 when、to）')
+                    continue
+                bk = str(b['k'])
+                keys(b, 'branch', gw + f' {key}「{bk}」')
+                if bk in seen:
+                    E(gw + f' 的 {key} 里 k「{bk}」重复')
+                seen.add(bk)
+                if re.search(r'[:~/@]', bk):
+                    E(gw + f' 的 {key}「{bk}」的 k 不能含 : ~ / @')
+                elif key == 'branches' and bk.startswith('all'):
+                    E(gw + f' 的 branches「{bk}」的 k 不能以 all 开头（all 留给「都通过」）')
     for sid, s in S.items():
         o = s.get('optional')
         if o is None:
@@ -333,6 +377,69 @@ def validate(d, ctx=None):
     for L in d['lines']:
         for a, b in zip(L.get('stations') or [], (L.get('stations') or [])[1:]):
             prev_of[b] = a
+    def chk_br(sid, b, bw):
+        """一条岔路的去向与出错判断：站的岔路、组的 pass 与组自己的岔路都用它（sid = 站 id 或组 id）。返回这条有没有写 fault"""
+        hf = False
+        if not b.get('when'):
+            E(bw + ' 没写 when（什么情况走这条）')
+        elif CODEY.search(b['when']):
+            W(bw + f' 的 when 像代码「{b["when"]}」：写人话，写触发条件本身')
+        to = b.get('to', 'next')
+        if to == 'again':
+            h = b.get('head') or head_of(sid)
+            if b.get('head') and b['head'] not in S:
+                E(bw + f' 的 head「{b["head"]}」不是站')
+            if not h:
+                E(bw + ' 是 again（下一轮从线头再来），但这一站不在任何线上')
+            else:
+                root = next((x for x in d['lines'] if x['stations'][0] == h or x.get('via') == h), {})
+                if not (root.get('every') or root.get('trigger')):
+                    W(bw + ' 是 again，但线头那条线没写 every / trigger：看图的人不知道「下一轮」是什么时候')
+            c = b.get('count')
+            if c is not None and (not isinstance(c, dict) or not c.get('name')):
+                E(bw + ' 的 count 要写成 {"name": "值守尝试", "max": 3}')
+        elif to == 'next' and sid in vias:
+            pass
+        elif to == 'next':
+            if sid not in line_of and sid not in mem:
+                E(bw + ' 是 next，但这一站不属于任何线，没有「下一站」')
+            elif next_of(sid) is None:
+                E(bw + (' 是 next，但它是站内线的最后一站：改成 to: "exit"，exit 写走外面哪条岔路' if ctx else ' 是 next，但它是线的最后一站且线没写 product / then'))
+        elif to == 'exit':
+            if not ctx:
+                E(bw + ' 用了 to: "exit"：只有站内小流程能用它')
+            elif b.get('exit') not in pks:
+                E(bw + f' 的 exit「{b.get("exit")}」不是外面那一站的岔路（外面有 {pks}）')
+        elif to == 'end' and ctx:
+            E(bw + ' 停在了站内：站内的货最终都要出站，用 to: "exit" 并写 exit')
+        elif to == 'end':
+            e = b.get('end') or {}
+            if e.get('kind') not in END_KINDS:
+                E(bw + f' 停在这里，end.kind 要是 {sorted(END_KINDS)} 之一')
+            if not e.get('label'):
+                W(bw + ' 没写 end.label（货停住时显示什么）')
+        elif to in mem:
+            E(bw + f' 的 to「{to}」是组「{mem[to]}」里的一方：货只能交给整个组（写 to: "{mem[to]}"），不能单交给其中一方')
+        elif to in G and sid in mem:
+            E(bw + f' 的 to「{to}」是一个组：组里的一方不能把货直接交给组（退回写 back 或前面的站）')
+        elif to not in ('back', 'exit', 'again') and to not in S and to not in prods and to not in G:
+            E(bw + f' 的 to「{to}」既不是站也不是成品库')
+        f = b.get('fault')
+        if f:
+            hf = True
+            if f.get('kind') not in FAULT_KINDS:
+                E(bw + f' 的 fault.kind 要是 {sorted(FAULT_KINDS)} 之一')
+            if not f.get('user_sees'):
+                E(bw + ' 的 fault 缺 user_sees（用户会看到什么）')
+            v = f.get('verdict') or {}
+            if v.get('level') not in LEVELS:
+                E(bw + ' 的 fault 缺 verdict.level（ok / risk / bad）')
+            elif v.get('level') in ('risk', 'bad') and '建议' not in (v.get('note') or ''):
+                E(bw + ' 判成有隐患 / 需要补，verdict.note 里要写「建议：……」')
+        elif to == 'end' and (b.get('end') or {}).get('kind') in ('failed', 'stuck', 'blocked', 'wait', 'returned'):
+            W(bw + ' 停在非成功结局却没写 fault：故障视图里看不到它的后果和判断')
+        return hf
+
     inner_walk = {}
     for sid, s in S.items():
         where = f'站「{sid}」'
@@ -389,65 +496,8 @@ def validate(d, ctx=None):
             W(where + ' 不属于任何线，也没有别的站跳过来：画出来会是一座孤岛')
         has_fault = False
         for b in brs:
-            bw = where + f' 岔路「{b.get("k")}」'
-            if not b.get('when'):
-                E(bw + ' 没写 when（什么情况走这条）')
-            elif CODEY.search(b['when']):
-                W(bw + f' 的 when 像代码「{b["when"]}」：写人话，写触发条件本身')
-            to = b.get('to', 'next')
-            if to == 'again':
-                h = b.get('head') or head_of(sid)
-                if b.get('head') and b['head'] not in S:
-                    E(bw + f' 的 head「{b["head"]}」不是站')
-                if not h:
-                    E(bw + ' 是 again（下一轮从线头再来），但这一站不在任何线上')
-                else:
-                    root = next((x for x in d['lines'] if x['stations'][0] == h or x.get('via') == h), {})
-                    if not (root.get('every') or root.get('trigger')):
-                        W(bw + ' 是 again，但线头那条线没写 every / trigger：看图的人不知道「下一轮」是什么时候')
-                c = b.get('count')
-                if c is not None and (not isinstance(c, dict) or not c.get('name')):
-                    E(bw + ' 的 count 要写成 {"name": "值守尝试", "max": 3}')
-            elif to == 'next' and sid in vias:
-                pass
-            elif to == 'next':
-                if sid not in line_of and sid not in mem:
-                    E(bw + ' 是 next，但这一站不属于任何线，没有「下一站」')
-                elif next_of(sid) is None:
-                    E(bw + (' 是 next，但它是站内线的最后一站：改成 to: "exit"，exit 写走外面哪条岔路' if ctx else ' 是 next，但它是线的最后一站且线没写 product / then'))
-            elif to == 'exit':
-                if not ctx:
-                    E(bw + ' 用了 to: "exit"：只有站内小流程能用它')
-                elif b.get('exit') not in pks:
-                    E(bw + f' 的 exit「{b.get("exit")}」不是外面那一站的岔路（外面有 {pks}）')
-            elif to == 'end' and ctx:
-                E(bw + ' 停在了站内：站内的货最终都要出站，用 to: "exit" 并写 exit')
-            elif to == 'end':
-                e = b.get('end') or {}
-                if e.get('kind') not in END_KINDS:
-                    E(bw + f' 停在这里，end.kind 要是 {sorted(END_KINDS)} 之一')
-                if not e.get('label'):
-                    W(bw + ' 没写 end.label（货停住时显示什么）')
-            elif to in mem:
-                E(bw + f' 的 to「{to}」是组「{mem[to]}」里的一方：货只能交给整个组（写 to: "{mem[to]}"），不能单交给其中一方')
-            elif to in G and sid in mem:
-                E(bw + f' 的 to「{to}」是一个组：组里的一方不能把货直接交给组（退回写 back 或前面的站）')
-            elif to not in ('back', 'exit', 'again') and to not in S and to not in prods and to not in G:
-                E(bw + f' 的 to「{to}」既不是站也不是成品库')
-            f = b.get('fault')
-            if f:
+            if chk_br(sid, b, where + f' 岔路「{b.get("k")}」'):
                 has_fault = True
-                if f.get('kind') not in FAULT_KINDS:
-                    E(bw + f' 的 fault.kind 要是 {sorted(FAULT_KINDS)} 之一')
-                if not f.get('user_sees'):
-                    E(bw + ' 的 fault 缺 user_sees（用户会看到什么）')
-                v = f.get('verdict') or {}
-                if v.get('level') not in LEVELS:
-                    E(bw + ' 的 fault 缺 verdict.level（ok / risk / bad）')
-                elif v.get('level') in ('risk', 'bad') and '建议' not in (v.get('note') or ''):
-                    E(bw + ' 判成有隐患 / 需要补，verdict.note 里要写「建议：……」')
-            elif to == 'end' and (b.get('end') or {}).get('kind') in ('failed', 'stuck', 'blocked', 'wait', 'returned'):
-                W(bw + ' 停在非成功结局却没写 fault：故障视图里看不到它的后果和判断')
         if not has_fault:
             u = s.get('unhandled')
             if not u:
@@ -498,18 +548,44 @@ def validate(d, ctx=None):
                 miss = [k for k in (b.get('k') for b in brs) if k not in exits]
                 if miss:
                     E(where + f' 的岔路 {miss} 在站内没有出口能走到：站内出口要和外面的岔路一一对得上')
+    # 组的 pass 与组自己的岔路：去向、结局、出错判断同站的岔路
+    for gid in G:
+        for key, items in (('pass', gpasses(gid)), ('branches', gbrs(gid))):
+            for b in items:
+                bw = f'组「{gid}」的 {key}「{b["k"]}」'
+                chk_br(gid, b, bw)
+                f = b.get('fault') or {}
+                for kind, t in (('when', b.get('when')), ('user_sees', f.get('user_sees')), ('note', (f.get('verdict') or {}).get('note'))):
+                    if t and too_long(t, kind):
+                        W(bw + f' 的 {kind}「{t[:20]}…」太长（≤ {LIMITS[kind]} 字）：只写要点，删掉解释和铺垫')
+                    hit = ai_tone(t)
+                    if hit:
+                        W(bw + f' 的 {kind} 有 AI 腔「{"、".join(hit)}」：换成直接的说法')
+
     def check_path(cw, path, expect_exit=None):
         came = None
         for i, p in enumerate(path):
             if p.get('st') in G:   # 组这一步：each 写每一方走哪条，货往哪走由几方的结果推出来
-                gid = p['st']; ms = members(gid); ev = p.get('each')
-                if p.get('br') is not None:
-                    E(cw + f' 第 {i+1} 步是组「{gid}」：写 each（每一方走哪条，比如 {{"qe": "ok", "ie": "skip"}}），不写 br')
-                    return
-                if ev is not None and not isinstance(ev, dict):
+                gid = p['st']; ms = members(gid); ev = p.get('each'); gk = [x['k'] for x in gbrs(gid)]; pk = [x['k'] for x in gpasses(gid)]
+                whole, n0 = p.get('br') is not None, len(err)
+                if whole:   # 整张单走了组自己的岔路（撤单之类）：不看几方
+                    if ev is not None:
+                        E(cw + f' 第 {i+1} 步是组「{gid}」，each 和 br 只能写一个：each = 每一方走哪条，br = 整张单走组自己的岔路')
+                    elif p['br'] not in gk:
+                        E(cw + f' 第 {i+1} 步是组「{gid}」：br 只能写组自己的岔路' + (f'（有 {gk}）' if gk else '（这个组没写 branches）') + f'；每一方走哪条写 each，比如 {{"{ms[0]}": "ok"}}')
+                    elif p.get('pass') is not None:
+                        E(cw + f' 第 {i+1} 步整张单走了「{p["br"]}」，不能再写 pass')
+                    else:
+                        for k in ('in', 'mode', 'n'):
+                            if p.get(k) is not None:
+                                E(cw + f' 第 {i+1} 步是组「{gid}」，不能写 {k}')
+                    if len(err) > n0:
+                        return
+                    b = next(x for x in gbranches(gid) if x['k'] == p['br']); s = {}
+                elif ev is not None and not isinstance(ev, dict):
                     E(cw + f' 第 {i+1} 步的 each 要写成 {{"成员站 id": "岔路 k" 或 "skip"}}')
                     return
-                for m, v in (ev or {}).items():
+                for m, v in ({} if whole else ev or {}).items():
                     if m not in ms:
                         E(cw + f' 第 {i+1} 步 each 里的「{m}」不是组「{gid}」的成员（成员有 {ms}）')
                         return
@@ -522,17 +598,31 @@ def validate(d, ctx=None):
                     elif v not in [x.get('k') for x in S[m].get('branches') or []]:
                         E(cw + f' 第 {i+1} 步 each 里「{m}」没有岔路「{v}」')
                         return
-                full = each_of(gid, p)
-                if all(v == 'skip' for v in full.values()):
-                    E(cw + f' 第 {i+1} 步把组「{gid}」的每一方都跳过了')
-                    return
-                if too_long(p.get('form'), 'form'):
-                    W(cw + f' 的 form「{p["form"][:20]}…」太长（≤ {LIMITS["form"]} 字）')
-                for k in ('in', 'mode', 'n'):
-                    if p.get(k) is not None:
-                        E(cw + f' 第 {i+1} 步是组「{gid}」，不能写 {k}')
-                b = decide(gid, full)
-                s = {}
+                if not whole:
+                    full = each_of(gid, p)
+                    if all(v == 'skip' for v in full.values()):
+                        E(cw + f' 第 {i+1} 步把组「{gid}」的每一方都跳过了')
+                        return
+                    if too_long(p.get('form'), 'form'):
+                        W(cw + f' 的 form「{p["form"][:20]}…」太长（≤ {LIMITS["form"]} 字）')
+                    for k in ('in', 'mode', 'n'):
+                        if p.get(k) is not None:
+                            E(cw + f' 第 {i+1} 步是组「{gid}」，不能写 {k}')
+                    b = decide(gid, full, p.get('pass'))
+                    if b is not None and b.get('gm'):
+                        if p.get('pass') is not None:
+                            E(cw + f' 第 {i+1} 步有一方没通过（「{b["gm"]}」走了「{b["gb"]}」），货按那一方的岔路走，不能写 pass')
+                            return
+                    elif pk and p.get('pass') is None:
+                        E(cw + f' 第 {i+1} 步都通过了，组「{gid}」写了 pass：这一步要写 pass 选哪一种（{pk}）')
+                        return
+                    elif pk and b is None:
+                        E(cw + f' 第 {i+1} 步的 pass「{p["pass"]}」不是组「{gid}」的 pass（有 {pk}）')
+                        return
+                    elif not pk and p.get('pass') is not None:
+                        E(cw + f' 第 {i+1} 步写了 pass，但组「{gid}」没写 pass：都通过只有一个去处')
+                        return
+                    s = {}
             else:
                 s = S.get(p.get('st'))
                 if not s:
@@ -540,6 +630,8 @@ def validate(d, ctx=None):
                     return
                 if p.get('each') is not None:
                     E(cw + f' 第 {i+1} 步的站「{p["st"]}」不是组，不能写 each')
+                if p.get('pass') is not None:
+                    E(cw + f' 第 {i+1} 步的站「{p["st"]}」不是组，不能写 pass')
                 b = next((x for x in s.get('branches', []) if x.get('k') == p.get('br')), None)
             if not b:
                 E(cw + f' 第 {i+1} 步：站「{p["st"]}」没有岔路「{p.get("br")}」')
@@ -623,15 +715,23 @@ def validate(d, ctx=None):
             E(cw + ' 没有 path')
             continue
         check_path(cw, path)
-    def cov(st, p):   # 这一步走到了哪些站的哪条岔路：组这一步展开成每一方各自走的那条
+    def cov(st, p):   # 这一步走到了哪些站的哪条岔路：组这一步展开成每一方各自走的那条；组自己的岔路记 (组, k)，pass 记 (组, '/k')
         if st in G:
-            return [(m, k) for m, k in each_of(st, p).items() if k not in (None, 'skip')]
+            out = [(m, k) for m, k in each_of(st, p).items() if k not in (None, 'skip')]
+            br = str(p.get('br') or '')
+            if br in [b['k'] for b in gbrs(st)]:
+                out.append((st, br))
+            elif p.get('pass') is not None or '/' in br:
+                out.append((st, '/' + str(p.get('pass') or br.split('/', 1)[1])))
+            return out
         return [(st, p.get('br'))]
     walked = {x for c in samples for p in (c.get('path') or []) if isinstance(p, dict) for x in cov(p.get('st'), p)}
     def lv(b):
         return (b.get('fault') or {}).get('verdict', {}).get('level')
-    bad = [f'{sid}.{b["k"]}' for sid, x in S.items() for b in x.get('branches', []) if lv(b) == 'bad' and (sid, b['k']) not in walked]
-    risk = [f'{sid}.{b["k"]}' for sid, x in S.items() for b in x.get('branches', []) if lv(b) == 'risk' and (sid, b['k']) not in walked]
+    items = [(f'{sid}.{b["k"]}', (sid, b['k']), lv(b)) for sid, x in S.items() for b in x.get('branches', [])]
+    items += [(f'{g}.{b["k"]}', (g, b['k']), lv(b)) for g in G for b in gbrs(g)] + [(f'{g}.{b["k"]}', (g, '/' + b['k']), lv(b)) for g in G for b in gpasses(g)]
+    bad = [(t, k) for t, k, v in items if v == 'bad' and k not in walked]
+    risk = [(t, k) for t, k, v in items if v == 'risk' and k not in walked]
     # 全部路线：与渲染器 buildRoutes 同一套规则（每站先走正常那条；同站最多进两次；同一条岔路一条路线里不走两次）
     # 页面列前 CAP 条；后面的只数不列，但有岔路只在后面出现时补列走到它的第一条（与渲染器 buildRoutes 一致，11-26）
     CAP, HARD = 60, 5000
@@ -647,7 +747,7 @@ def validate(d, ctx=None):
             return
         if sum(1 for p in path if p[0] == sid) >= 2:
             return
-        st = {'branches': gbranches(sid), 'default': 'all'} if sid in G else S[sid]
+        st = {'branches': gbranches(sid), 'default': gbranches(sid)[0]['k']} if sid in G else S[sid]
         for b in sorted(st.get('branches', []), key=lambda b: b.get('k') != st.get('default')):
             if total[0] >= HARD:
                 return
@@ -687,12 +787,12 @@ def validate(d, ctx=None):
         say(f'全部路线{shown}，最长 {longest} 步；没写 samples，自动播放把全部路线挨个演一遍')
     if not samples:  # 不写样例货时自动播放演的是全部路线，算它们走到过的岔路
         covered = {y for r in routes for x in r for y in cov(x[0], {'br': x[1]})}
-        bad = [k for k in bad if tuple(k.split('.', 1)) not in covered]
-        risk = [k for k in risk if tuple(k.split('.', 1)) not in covered]
+        bad = [x for x in bad if x[1] not in covered]
+        risk = [x for x in risk if x[1] not in covered]
     if bad:
-        W(f'「需要补」的出错去向没有样例货走到：{"、".join(bad)}。至少给它一件样例货，让人看着它出事')
+        W(f'「需要补」的出错去向没有样例货走到：{"、".join(t for t, _ in bad)}。至少给它一件样例货，让人看着它出事')
     if risk:
-        say(f'{len(risk)} 条「有隐患」的出错去向没有样例货走到（不强求，挑最要紧的走一两条即可）：{"、".join(risk[:8])}')
+        say(f'{len(risk)} 条「有隐患」的出错去向没有样例货走到（不强求，挑最要紧的走一两条即可）：{"、".join(t for t, _ in risk[:8])}')
     return err, warn, check_path
 
 

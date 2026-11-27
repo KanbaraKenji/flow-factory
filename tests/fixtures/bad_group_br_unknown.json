@@ -1,0 +1,465 @@
+{
+ "schema": "flow-factory/0",
+ "title": "整张单去向写错",
+ "subtitle": "财务、法务、主管同时审，都通过才付款 · 样例货为虚构",
+ "summary": {
+  "input": "员工提交的一张报销单",
+  "output": "钱付给员工，单子归档"
+ },
+ "source": {
+  "rev": "test-20261127"
+ },
+ "groups": [
+  {
+   "id": "approve",
+   "name": "三方审批",
+   "mode": "all",
+   "stations": [
+    "fin",
+    "legal",
+    "boss"
+   ],
+   "on_return": "others_continue",
+   "pass": [
+    {
+     "k": "first",
+     "when": "首次审批",
+     "to": "next"
+    },
+    {
+     "k": "again",
+     "when": "改过后重审",
+     "to": "pay"
+    }
+   ],
+   "branches": [
+    {
+     "k": "withdraw",
+     "when": "申请人撤回",
+     "to": "end",
+     "end": {
+      "kind": "returned",
+      "label": "报销单撤回"
+     },
+     "fault": {
+      "kind": "stop",
+      "user_sees": "单子作废，三方的审批都停下",
+      "verdict": {
+       "level": "ok",
+       "note": "申请人自己撤的，不用管"
+      }
+     }
+    }
+   ]
+  }
+ ],
+ "lines": [
+  {
+   "id": "main",
+   "name": "报销单",
+   "stations": [
+    "submit",
+    "approve",
+    "payer",
+    "pay",
+    "archive"
+   ],
+   "product": "done"
+  }
+ ],
+ "stations": {
+  "submit": {
+   "name": "提交报销",
+   "kind": "in",
+   "actor": "申请人",
+   "does": "填金额、事由，附上发票",
+   "input": "一沓发票",
+   "output": "待审报销单",
+   "writes": [
+    {
+     "store": "db",
+     "what": "报销单 状态 = 待审"
+    }
+   ],
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "提交",
+     "to": "next"
+    }
+   ],
+   "unhandled": {
+    "user_sees": "提交失败时页面报错，单子没建",
+    "verdict": {
+     "level": "ok",
+     "note": "当场报错让人重填，不用管"
+    }
+   }
+  },
+  "fin": {
+   "name": "财务审批",
+   "kind": "check",
+   "actor": "财务",
+   "does": "核发票和金额",
+   "input": "待审报销单",
+   "output": "财务意见",
+   "writes": [
+    {
+     "store": "db",
+     "what": "审批记录 财务"
+    }
+   ],
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "财务同意",
+     "to": "next"
+    },
+    {
+     "k": "back",
+     "when": "财务退回",
+     "to": "submit",
+     "fault": {
+      "kind": "human",
+      "user_sees": "申请人看到退回原因，改完重提",
+      "verdict": {
+       "level": "ok",
+       "note": "当场退回让人改，不用管"
+      }
+     }
+    }
+   ]
+  },
+  "legal": {
+   "name": "法务审批",
+   "kind": "check",
+   "actor": "法务",
+   "does": "看合同条款",
+   "input": "待审报销单",
+   "output": "法务意见",
+   "optional": "没有合同的报销，法务跳过",
+   "writes": [
+    {
+     "store": "db",
+     "what": "审批记录 法务"
+    }
+   ],
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "法务同意",
+     "to": "next"
+    },
+    {
+     "k": "back",
+     "when": "法务退回",
+     "to": "submit",
+     "fault": {
+      "kind": "human",
+      "user_sees": "申请人看到退回原因，改完重提",
+      "verdict": {
+       "level": "ok",
+       "note": "当场退回让人改，不用管"
+      }
+     }
+    }
+   ]
+  },
+  "boss": {
+   "name": "主管审批",
+   "kind": "check",
+   "actor": "主管",
+   "does": "看这笔钱该不该花",
+   "input": "待审报销单",
+   "output": "主管意见",
+   "writes": [
+    {
+     "store": "db",
+     "what": "审批记录 主管"
+    }
+   ],
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "主管同意",
+     "to": "next"
+    },
+    {
+     "k": "back",
+     "when": "主管退回",
+     "to": "submit",
+     "fault": {
+      "kind": "human",
+      "user_sees": "申请人看到退回原因，改完重提",
+      "verdict": {
+       "level": "ok",
+       "note": "当场退回让人改，不用管"
+      }
+     }
+    }
+   ]
+  },
+  "payer": {
+   "name": "登记付款人",
+   "kind": "hand",
+   "actor": "出纳",
+   "does": "定谁付、付到哪张卡、哪天付",
+   "input": "审批通过的报销单",
+   "output": "排好付款的单",
+   "writes": [
+    {
+     "store": "db",
+     "what": "报销单 付款人、付款日"
+    }
+   ],
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "登记好了",
+     "to": "next"
+    }
+   ],
+   "unhandled": {
+    "user_sees": "出纳没登记时单子停在待付款",
+    "verdict": {
+     "level": "ok",
+     "note": "出纳每天看待办，不用管"
+    }
+   }
+  },
+  "pay": {
+   "name": "付款",
+   "kind": "step",
+   "actor": "出纳",
+   "does": "按登记的卡号转账",
+   "input": "排好付款的单",
+   "output": "已付款的单",
+   "writes": [
+    {
+     "store": "db",
+     "what": "报销单 状态 = 已付款"
+    }
+   ],
+   "irreversible": {
+    "type": "send",
+    "what": "把钱转给员工",
+    "protection": {
+     "level": "ok",
+     "note": "转账前出纳核一遍卡号和金额"
+    }
+   },
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "转账成功",
+     "to": "next"
+    },
+    {
+     "k": "bounce",
+     "when": "银行退票",
+     "to": "end",
+     "end": {
+      "kind": "blocked",
+      "label": "等出纳核卡号"
+     },
+     "fault": {
+      "kind": "human",
+      "user_sees": "单子停在付款中",
+      "verdict": {
+       "level": "risk",
+       "note": "退票不提醒申请人。建议：退票时给申请人发一条通知"
+      }
+     }
+    }
+   ]
+  },
+  "archive": {
+   "name": "归档",
+   "kind": "out",
+   "actor": "财务",
+   "does": "发票原件入档",
+   "input": "已付款的单",
+   "output": "已归档",
+   "writes": [
+    {
+     "store": "db",
+     "what": "报销单 状态 = 已归档"
+    }
+   ],
+   "default": "ok",
+   "branches": [
+    {
+     "k": "ok",
+     "when": "入档",
+     "to": "next"
+    }
+   ],
+   "unhandled": {
+    "user_sees": "漏归档时月底对账会发现",
+    "verdict": {
+     "level": "ok",
+     "note": "月底对账兜底，不用管"
+    }
+   }
+  }
+ },
+ "products": [
+  {
+   "id": "done",
+   "name": "已归档",
+   "desc": "钱已付，发票入档"
+  }
+ ],
+ "stores": [
+  {
+   "id": "db",
+   "name": "报销单库",
+   "kind": "db"
+  }
+ ],
+ "samples": [
+  {
+   "id": "s1",
+   "name": "一次就过",
+   "badge": "顺",
+   "desc": "差旅费，三方都同意",
+   "input": "报销单 #E-0301",
+   "path": [
+    {
+     "st": "submit",
+     "br": "ok",
+     "form": "待审单 #E-0301"
+    },
+    {
+     "st": "approve",
+     "each": {
+      "fin": "ok",
+      "legal": "ok",
+      "boss": "ok"
+     },
+     "pass": "first",
+     "form": "审批通过的单"
+    },
+    {
+     "st": "payer",
+     "br": "ok",
+     "form": "排好付款的单"
+    },
+    {
+     "st": "pay",
+     "br": "ok",
+     "form": "已付款 1280 元"
+    },
+    {
+     "st": "archive",
+     "br": "ok",
+     "form": "已归档的单"
+    }
+   ]
+  },
+  {
+   "id": "s2",
+   "name": "退回改过再审",
+   "badge": "改",
+   "desc": "主管退回，改过直接付款",
+   "input": "报销单 #E-0302",
+   "path": [
+    {
+     "st": "submit",
+     "br": "ok",
+     "form": "待审单 #E-0302"
+    },
+    {
+     "st": "approve",
+     "each": {
+      "boss": "back"
+     },
+     "form": "被退回的单"
+    },
+    {
+     "st": "submit",
+     "br": "ok",
+     "form": "改过的单"
+    },
+    {
+     "st": "approve",
+     "each": {},
+     "pass": "again",
+     "form": "审批通过的单"
+    },
+    {
+     "st": "pay",
+     "br": "ok",
+     "form": "已付款 960 元"
+    },
+    {
+     "st": "archive",
+     "br": "ok",
+     "form": "已归档的单"
+    }
+   ]
+  },
+  {
+   "id": "s3",
+   "name": "申请人撤回",
+   "badge": "撤",
+   "desc": "审批中途自己撤了",
+   "input": "报销单 #E-0303",
+   "path": [
+    {
+     "st": "submit",
+     "br": "ok",
+     "form": "待审单 #E-0303"
+    },
+    {
+     "st": "approve",
+     "br": "cancel",
+     "form": "撤回的单"
+    }
+   ]
+  },
+  {
+   "id": "s4",
+   "name": "没有合同",
+   "badge": "简",
+   "desc": "法务那一方跳过",
+   "input": "报销单 #E-0304",
+   "path": [
+    {
+     "st": "submit",
+     "br": "ok",
+     "form": "待审单 #E-0304"
+    },
+    {
+     "st": "approve",
+     "each": {
+      "legal": "skip"
+     },
+     "pass": "first",
+     "form": "审批通过的单"
+    },
+    {
+     "st": "payer",
+     "br": "ok",
+     "form": "排好付款的单"
+    },
+    {
+     "st": "pay",
+     "br": "ok",
+     "form": "已付款 300 元"
+    },
+    {
+     "st": "archive",
+     "br": "ok",
+     "form": "已归档的单"
+    }
+   ]
+  }
+ ]
+}

@@ -43,6 +43,14 @@
   "expect": "warn",
   "contains": "站「pay」 是系统闸门，紧跟在「收单」后面"
  },
+ "bad_group_br_unknown.json": {
+  "expect": "error",
+  "contains": "br 只能写组自己的岔路"
+ },
+ "bad_group_each_and_br.json": {
+  "expect": "error",
+  "contains": "each 和 br 只能写一个"
+ },
  "bad_group_each_unknown.json": {
   "expect": "error",
   "contains": "样例货「s1」 第 2 步 each 里的「"
@@ -58,6 +66,10 @@
  "bad_group_on_return.json": {
   "expect": "error",
   "contains": "组「review」 的 on_return"
+ },
+ "bad_group_pass_missing.json": {
+  "expect": "error",
+  "contains": "写了 pass：这一步要写 pass"
  },
  "bad_group_skip_not_optional.json": {
   "expect": "error",
@@ -141,6 +153,9 @@
  "ok_four_structures.json": {
   "expect": "warn",
   "contains": "站「wake」站内：站「w1」 没写 inp"
+ },
+ "ok_group_pass_and_withdraw.json": {
+  "expect": "clean"
  },
  "ok_inner_three_levels.json": {
   "expect": "warn",
