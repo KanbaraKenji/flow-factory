@@ -104,7 +104,7 @@ a{text-decoration:none;color:var(--pri-t)}
 /* 组（几方同时处理、都通过才往下）：淡底虚线框 + 标题；这件货跳过的那一方虚线卡、挂「跳过」，分到它的那一股带子变淡 */
 .gbox{cursor:pointer} .gbox .gbg{fill:color-mix(in srgb,var(--lc) 5%,transparent);stroke:var(--lc);stroke-opacity:.45;stroke-width:1.3;stroke-dasharray:6 5}
 .gbox:hover .gbg,.gbox.sel .gbg{stroke-opacity:.9;stroke-width:1.8}
-.gbox .gl{font:600 12px var(--font);fill:var(--tx2)} .gbox .gl2{font:11.5px var(--font);fill:var(--tx3)}
+.gbox .gl{font:600 13px var(--font);fill:var(--tx2)} .gbox .gl2{font:11.5px var(--font);fill:var(--tx3)}
 .card.gskip .bx{stroke-dasharray:5 4;fill:var(--well)} .card.gskip .pmid,.card.gskip .pbot,.card.gskip .ic,.card.gskip .nm{opacity:.5}
 .pill.gsk rect{fill:var(--well);stroke:var(--tx3);stroke-dasharray:3 2} .pill.gsk text{fill:var(--tx2)}
 .lgs{opacity:.2} .tok.gcp{pointer-events:none}
@@ -232,6 +232,11 @@ svg.routing .eg:not(.rt){opacity:.06!important} .eg.rt{opacity:1!important} .eg.
 .ib:hover{background:var(--well);color:var(--tx)} .ib:disabled{opacity:.35;cursor:default;background:transparent}
 .ib.pri{background:var(--pri);color:var(--on-pri)} .ib.pri:hover{background:var(--pri-h);color:var(--on-pri)}
 .ib.tgl.on{color:var(--pri-t);background:var(--pri-tint)}
+/* 对外页（audience: public）：关掉给出图人和开发者用的入口——寻路、对比、操作说明、反馈、代码位置、复制成样例货；只剩一个视图时视图页签也不显示（11-27） */
+:root[data-public] #routeBtn,:root[data-public] #cmpBtn,:root[data-public] #helpBtn,:root[data-public] [data-fb],:root[data-public] .fbo,:root[data-public] .fbf,:root[data-public] .dev,:root[data-public] [data-copy]{display:none!important}
+#viewSeg.one{display:none}
+/* 小地图：汇报配色默认不显示，minimap: false / 链接 minimap=0 关掉，minimap: true / minimap=1 强制显示（11-27 用户：右下小地图太碍眼） */
+:root[data-nomm] #mm{display:none!important}
 .ib.spd{width:44px;font:600 12.5px var(--font);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .ib.spd.on{color:var(--pri-t);background:var(--pri-tint)}
 .spdpop{position:absolute;z-index:12;bottom:58px;background:var(--solid);border:1px solid var(--line2);border-radius:12px;box-shadow:var(--shadow);padding:4px;display:flex;flex-direction:column;gap:1px;min-width:132px}
@@ -426,6 +431,7 @@ svg.lnhl #world .eg.lh .belt.main{stroke-opacity:.8!important} svg.lnhl #world .
 /* 画面最左侧的竖线路图：只画圆点；已过实心、本站带呼吸光、还没到空心；出发即填线、到站弹点（与货箱同步） */
 .rail{position:absolute;left:6px;top:12px;bottom:auto;width:36px;z-index:6;display:flex;flex-direction:column;justify-content:center;pointer-events:none}
 .rail ol{list-style:none;margin:0;padding:0;pointer-events:auto;overflow:visible}
+.rail::before{content:"";position:absolute;inset:-6px -2px;border-radius:12px;background:color-mix(in srgb,var(--solid) 82%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--line2) 60%,transparent);z-index:-1}   /* 线路图底板：镜头没让开时（拖动、缩放）也不和站卡的字叠在一起 */
 .rail.scroll{justify-content:flex-start} .rail.scroll ol{max-height:100%;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;padding:10px 0;-webkit-mask-image:linear-gradient(transparent,#000 22px,#000 calc(100% - 22px),transparent);mask-image:linear-gradient(transparent,#000 22px,#000 calc(100% - 22px),transparent)}
 .rail li{position:relative;height:var(--rg,26px);display:flex;justify-content:center}
 .rail li::before,.rail li::after{content:"";position:absolute;left:16px;top:9px;width:4px;height:var(--rg,26px);border-radius:2px;background:var(--line2)}
@@ -600,7 +606,17 @@ svg.lnhl #world .eg.lh .belt.main{stroke-opacity:.8!important} svg.lnhl #world .
    ════════════════════════════════════════════════════════════════ */
 const D=JSON.parse(document.getElementById('flow-data').textContent);
 const $=s=>document.querySelector(s);
-const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+/* 叫法（vocab）：rule = 业务规则图；也可写对象逐词覆盖 {base:"rule", kind:{in:"提交"}, product, cargo, sample, branch, trigger}（11-27 用户：对外投影不该出现「货」「成品库」）。
+   只改界面上的固定说法，不改作者写的数据：数据经 esc 时包一对私用区记号，写进页面前只替换记号外面的字，再去掉记号 */
+const VOC=(()=>{ const v=D.vocab, o=v&&typeof v==='object'?v:{}, base=v==='rule'||o.base==='rule';
+  const def=base?{product:'完成',cargo:'单子',sample:'样例',branch:'去向',trigger:'入口',kind:{in:'提交',step:'处理',check:'审核',gate:'检查',hand:'人工',ai:'AI',out:'结束'}}:{kind:{}};
+  const r={base,kind:Object.assign({},def.kind,o.kind||{})}; ['product','cargo','sample','branch','trigger'].forEach(k=>{ const x=o[k]!=null?o[k]:def[k]; if(x) r[k]=String(x); });
+  r.on=!!(r.product||r.cargo||r.sample||r.branch||r.trigger); return r; })();
+const VW=[['成品库','product'],['样例货','sample'],['怎么触发','trigger'],['岔路','branch'],['货','cargo']].filter(([,k])=>VOC[k]);
+const esc=s=>{ const t=String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); return VOC.on?''+t+'':t; };
+function vocab(h){ if(!VOC.on||typeof h!=='string') return h; return h.split(/([^]*)/).map(seg=>seg.charCodeAt(0)===0xE000?seg.slice(1,-1):VW.reduce((x,[w,k])=>x.split(w).join(VOC[k]),seg)).join('').replace(/[]/g,''); }
+if(VOC.on){ const d=Object.getOwnPropertyDescriptor(Element.prototype,'innerHTML'); Object.defineProperty(Element.prototype,'innerHTML',{get(){ return d.get.call(this); },set(h){ d.set.call(this,vocab(h)); },configurable:true});
+  const ia=Element.prototype.insertAdjacentHTML; Element.prototype.insertAdjacentHTML=function(p,h){ return ia.call(this,p,vocab(h)); }; }
 const NS='http://www.w3.org/2000/svg';
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 /* 链接参数（11-26 用户：汇报时用链接直接打开到「配色 + 场景 + 演练」）。三种写法都认：?skin=report&drill=1　#skin=report&drill=1　#skin.report~drill~sample.s2（Artifact 链接只能用最后这种）。从链接来的设置只管这一次打开，不写进浏览器记忆 */
@@ -617,11 +633,11 @@ const calm=()=>document.documentElement.hasAttribute('data-calm'); let calmWake=
   ['pointermove','pointerdown','keydown','wheel'].forEach(k=>addEventListener(k,wake,{passive:true})); calmWake=wake; wake(); })();   /* 汇报主题：鼠标停 2.5 秒控件淡出，截图干净 */   /* 汇报主题：装饰动效关掉，只留货沿带子走 */
 
 /* ── 词典 ── */
-const KIND={in:'入料',step:'加工',check:'检查',gate:'闸门',hand:'人工',ai:'AI',out:'出货'};
+const KIND=Object.assign({in:'入料',step:'加工',check:'检查',gate:'闸门',hand:'人工',ai:'AI',out:'出货'},VOC.kind);
 const ENDK={done:'完成',wait:'等下一轮',blocked:'等人',returned:'退回',failed:'失败',stuck:'卡死',exit:'出站'};
 const OUTV={r:[1,0],l:[-1,0],b:[0,1],t:[0,-1]};   /* 墙在哪一侧 → 朝墙外的方向 */
 /* 叫法：vocab: "rule" = 业务规则图（用户 11-26：岔路是规则本身，不是出错）。同一套数据，故障视图改叫「关卡」，小标按货被拦到哪写，不显示关注等级 */
-const RULE=(typeof D!=='undefined'&&D.vocab==='rule');
+const RULE=VOC.base;
 function ruleLab(b,sid){ const t=b.to||'next'; if(t==='back') return '回原站'; if(t==='again') return '下一轮再来'; if(t==='exit') return '出站';
   if(t==='end') return ({returned:'退回发起人',failed:'不能继续',done:'到此结束',wait:'停住等待',blocked:'停住等人',stuck:'卡住'})[(b.end||{}).kind]||'到此结束';
   if(t==='next') return '往下走'; sid=(typeof MEM!=='undefined'&&MEM[sid])||sid;   /* 会签组的一方：按组在线上的位置算前后 */
@@ -661,7 +677,10 @@ function loadLevel(){ const def=LV.def, par=LV.parent;
 const GRP={}, MEM={};
 function loadGroups(def){ for(const k in GRP) delete GRP[k]; for(const k in MEM) delete MEM[k];
   (def.groups||[]).forEach(g=>{ if(!g||!g.id||S[g.id]) return; const ms=(g.stations||[]).filter(m=>S[m]&&!MEM[m]); if(ms.length<2) return;
-    const G=GRP[g.id]={id:g.id,name:g.name||g.id,mode:g.mode||'all',on:g.on_return==='others_stop'?'stop':'continue',members:ms}; ms.forEach(m=>MEM[m]=g.id);
+    const G=GRP[g.id]={id:g.id,name:g.name||g.id,mode:g.mode||'all',on:g.on_return==='others_stop'?'stop':'continue',members:ms,labels:g.labels&&typeof g.labels==='object'?g.labels:{}}; ms.forEach(m=>MEM[m]=g.id);
+    /* 「退回」这个词按这个流程自己的叫法：各方不通过那条岔路的 when 里写了驳回 / 退回 / 否决 / 拒绝的就用它，都没写就说「不通过」（11-27：这个流程里叫驳回） */
+    const ws=ms.flatMap(m=>S[m].branches.filter(b=>(b.to||'next')!=='next').map(b=>String(b.when||''))); G.ret=['驳回','退回','否决','拒绝','打回'].find(v=>ws.some(w=>w.includes(v)))||'不通过';
+    G.rule=G.labels.rule||(G.name+' · 都通过才往下'); G.onr=G.labels.on_return||('一方'+G.ret+(G.on==='stop'?'，其余停下':'，其余照常'));
     const who=m=>S[m].actor||S[m].name, br=[{k:'all',when:'都通过',to:'next',gall:true}];
     ms.forEach(m=>{ if(S[m].optional) br.push({k:'all~'+m,when:'都通过（跳过 '+who(m)+'）',to:'next',gall:true,skip:[m]}); });
     ms.forEach(m=>S[m].branches.forEach(b=>{ if((b.to||'next')==='next') return; const w=String(b.when||'').startsWith(who(m))?b.when:who(m)+'：'+b.when;
@@ -1112,7 +1131,7 @@ function dOf(p,r=14){ if(!p||!p.length) return ''; let d='M'+p[0][0]+' '+p[0][1]
 function polyLen(p){ let L=0; for(let i=1;i<p.length;i++) L+=Math.hypot(p[i][0]-p[i-1][0],p[i][1]-p[i-1][1]); return L; }
 function polyAt(p,t){ const L=polyLen(p)*t; let a=0; for(let i=1;i<p.length;i++){ const s=Math.hypot(p[i][0]-p[i-1][0],p[i][1]-p[i-1][1]); if(a+s>=L||i===p.length-1){ const u=s?Math.min(1,(L-a)/s):1; return [p[i-1][0]+(p[i][0]-p[i-1][0])*u,p[i-1][1]+(p[i][1]-p[i-1][1])*u]; } a+=s; } return p[p.length-1]; }
 function bbox(){ if(st.view==='metro'&&MP) return MP.box; if(BOX){ let a=BOX.a-10, b=BOX.b-10, c=BOX.c+10, d=BOX.d+30; const tw=t=>[...t].reduce((w,ch)=>w+(ch.charCodeAt(0)>255?12.5:7),0);
-    Object.values(N).forEach(n=>{ if(!n.term) return; if(n.stub) d=Math.max(d,n.y+70);
+    Object.values(N).forEach(n=>{ if(!n.term) return; if(n.stub) d=Math.max(d,n.y+64+(n.srow||0)*20);
       if(n.entry){ const w=tw('从「'+n.from+'」进来')+20; if(n.wall==='l') a=Math.min(a,n.x-w); else if(n.wall==='r') c=Math.max(c,n.x+w); else if(n.wall==='t') b=Math.min(b,n.y-50); else d=Math.max(d,n.y+60); } });
     return [a,b,c,d]; } let [a,b,c,d]=nodeBox(); EDGES.forEach(e=>(e.pts||[]).forEach(([x,y])=>{ a=Math.min(a,x-8); b=Math.min(b,y-8); c=Math.max(c,x+8); d=Math.max(d,y+8); })); const ci=C()&&!LSTACK.length?String(C().input||''):'', lm=LSTACK.length?30:clamp(40+txtW(ci,13)/2,70,230);   /* 左边只留入口那件货说明字要的宽度（11-26：固定 230 让看全图偏右、字小） */
   return [a-lm,b-20,c+30,d+20]; }   /* 外层左边留出入口那件货的说明字（两行约 210 宽） */
@@ -1210,9 +1229,10 @@ function cardSvg(id,PS){
 }
 /* 组的外框：淡底虚线框，顶上两行「组名 · 都通过才往下」「一方退回其余照常 / 停下」（底下留给最后一方的说明字）；点框或标题看这个组 */
 function grpSvg(gid){ const n=N[gid], G=GRP[gid]; if(!n||!n.grp) return ''; const x0=n.x-n.w/2-GBUS-11, x1=n.x+n.w/2+GBUS+11, y0=n.y0, y1=n.y1, lc=colorOf(gid);   /* 分叉 / 汇合那一竖段在框里 */
-  const t1=fitW(G.name+' · 都通过才往下',12,x1-x0-20), t2=G.on==='stop'?'一方退回其余停下':'一方退回其余照常';
+  /* 框顶只写一行（11-27：第二行被选中时的框线划过、看全图只有 9px）：放得下就「规则 · 其余怎样」，放不下只写规则，其余怎样在悬停和面板里 */
+  const full=G.rule+'；'+G.onr, t1=txtW(full,13)<=x1-x0-24?full:fitW(G.rule,13,x1-x0-24), t2=G.onr;
   const opt=G.members.filter(m=>S[m].optional).map(m=>(S[m].actor||S[m].name)+' 可能不在：'+S[m].optional);
-  return `<g class="gbox${st.selS===gid?' sel':''}" data-st="${esc(gid)}" style="--lc:${lc}"><title>${esc(G.name)}：${esc(G.members.map(m=>S[m].actor||S[m].name).join('、'))} 同时处理，都通过才往下；${esc(t2)}${opt.length?'；'+esc(opt.join('；')):''}</title><rect class="gbg" x="${x0}" y="${y0}" width="${x1-x0}" height="${y1-y0}" rx="16"/><text class="gl" x="${x0+12}" y="${y0+16}">${esc(t1)}</text><text class="gl2" x="${x0+12}" y="${y0+31}">${esc(t2)}</text></g>`; }
+  return `<g class="gbox${st.selS===gid?' sel':''}" data-st="${esc(gid)}" style="--lc:${lc}"><title>${esc(G.name)}：${esc(G.members.map(m=>S[m].actor||S[m].name).join('、'))} 同时处理；${esc(G.rule)}；${esc(t2)}${opt.length?'；'+esc(opt.join('；')):''}</title><rect class="gbg" x="${x0}" y="${y0}" width="${x1-x0}" height="${y1-y0}" rx="16"/><text class="gl" x="${x0+12}" y="${y0+21}">${esc(t1)}</text></g>`; }
 function doorSvg(p,n){ const L=(n.gl||40)/2, w=n.wall, same=Object.values(N).filter(z=>z.term&&z.wall===w).sort((u,v)=>(w==='t'||w==='b')?u.x-v.x:u.y-v.y), k=(same.indexOf(n)%2)*18;
   const tx=w==='r'?n.x-16:w==='l'?n.x+16:n.x+L+8, ty=w==='t'?n.y+22+k:w==='b'?n.y-10-k:n.y-L-8-k, anc=w==='r'?'end':'start';
   return `<g class="door" data-door="${esc(p.exitK)}"><title>出口：${esc(p.desc||'')}。出站后${esc(p.name)}，点它回到外面</title><rect class="hit" x="${n.x-L-4}" y="${n.y-L-4}" width="${2*L+8}" height="${2*L+8}" rx="10"/>${n.stub?'':`<text class="dl" x="${tx}" y="${ty}" text-anchor="${anc}">${esc(p.name)}</text>`}</g>`; }
@@ -1346,7 +1366,7 @@ function slotAt(b){ const c=C(), s=stateAt(c,b);
   if(s.p<0&&N['E:0']){ const T=N['E:'+(LV.entry||0)]||N['E:0']; return {x:T.x,y:T.y,at:'in:'+((c.path[0]||{}).st||'')}; }   /* 站内：货就停在入口开口上（外面那条带子碰卡的那一点） */
   if(s.p<0){ const n=N[c.path[0].st]; return {x:n.x-CW/2-26,y:n.y,at:'in:'+c.path[0].st}; }
   { const ga=gAt(c,b); if(ga) return grpSlot(ga); }
-  if(s.end&&s.end.k==='exit'){ const n=N[s.end.at], [ox,oy]=OUTV[n.wall]||[0,0]; return n.stub?{x:n.x,y:n.y+44,at:s.end.at}:{x:n.x,y:n.y,at:s.end.at}; }
+  if(s.end&&s.end.k==='exit'){ const n=N[s.end.at], [ox,oy]=OUTV[n.wall]||[0,0]; return n.stub?{x:n.x,y:n.y+40+(n.srow||0)*20,at:s.end.at}:{x:n.x,y:n.y,at:s.end.at}; }
   if(s.end&&s.end.k==='prod'){ const n=N[s.end.at]; return {x:n.x+n.w/2-30,y:n.y,at:s.end.at,proc:true,rt:true,nocap:true,ended:true}; }   /* 进成品库：货留在成品库卡里（右侧，卡文字给它留了位） */
   const id=s.end?s.end.at:c.path[s.p].st, n=N[id];
   if(s.end&&(!N[id]||!S[id])){ return {x:n?n.x:0,y:n?n.y+CH/2+18:0,at:id,ended:true}; }
@@ -1398,13 +1418,12 @@ function drawToks(){ const c=C(); const g=$('#toks'); if(!c){ g.innerHTML=''; re
   o+=`<g class="${cls}${stk?' stk':''}" transform="translate(${TK.x} ${TK.y})${PIN||inCard?' scale(.8)':''}"><title>${esc(c.name)}：${esc(formAt(c,s.p))}</title>${stk&&calm()?'<rect class="sk2" x="-5" y="-5" width="26" height="26" rx="7"/><rect class="sk1" x="-9" y="-9" width="26" height="26" rx="7"/>':''}<rect x="-13" y="-13" width="26" height="26" rx="7"/><text y="5" text-anchor="middle">${esc(c.badge||c.name[0])}</text>${stk&&!PIN&&!inCard?`<g class="skn"><rect x="10" y="-30" width="${txtW('×'+stk,11)+10}" height="16" rx="8"/><text x="${15+txtW('×'+stk,11)/2}" y="-18" text-anchor="middle">×${esc(stk)}</text></g>`:''}</g>`;
   if(inCard||(calm()&&moveTok.on&&moveTok.cur&&performance.now()<moveTok.cur.t0+moveTok.cur.ms)){}
   else if(PIN){ if(!PIN.nocap){ const n=N[PIN.at], txt=s.end?s.end.label:(CAPO!=null?CAPO:formAt(c,s.p))+(stk?' ×'+stk:'');
-    /* 汇报主题：卡上的字不让道，说明字写在卡正下方（用户 10-29）；其余主题写在加工区里货的旁边。在卡里时 ×N 写进说明字，不挂货头顶；到了终点写结局 */
-    if(calm()){ const up=st.cur==='drill'&&!$('#board').hidden;   /* 演练停在岔路时卡下方挂着结局键帽，说明字改写到卡正上方（11-26） */
-      o+=`<text class="tcap gin${s.end?' end':''}" x="${n.x}" y="${up?n.y-n.h/2-9:n.y+n.h/2+17}" text-anchor="middle">${esc(fitW(txt,13,n.w+40))}</text>`; }
-    else { const w=PIN.rt?TK.x-14-(n.x-n.w/2+15):(n.x+n.w/2-13)-(TK.x+14), t=fitW(txt,13,Math.max(40,w));
-      o+=`<text class="tcap gin${s.end?' end':''}" x="${PIN.rt?TK.x-14:TK.x+14}" y="${n.y+4.5}" text-anchor="${PIN.rt?'end':'start'}">${esc(t)}</text>`; } } }
+    /* 货停在站里时，说明字一律写在卡正下方、放不下就折行（最多 3 行），不压卡上的字、不截断（汇报主题 10-29 起如此；11-27 用户：其余配色压住执行者胶囊、截成「样品 5 PCS + 测…」，统一改到卡下方）。
+       演练停在岔路时卡下方挂着结局键帽，改写到卡正上方。在卡里时 ×N 写进说明字，不挂货头顶；到了终点写结局 */
+    const up=st.cur==='drill'&&!$('#board').hidden, L=wrapN(txt,13,n.w+40,3);
+    o+=L.map((t,i)=>`<text class="tcap gin${s.end?' end':''}" x="${n.x}" y="${up?n.y-n.h/2-9-(L.length-1-i)*16:n.y+n.h/2+17+i*16}" text-anchor="middle">${esc(t)}</text>`).join(''); } }
   else if(s.end) o+=`<text class="tcap end" x="${TK.x}" y="${TK.y+(s.end.k==='exit'?-22:34)}" text-anchor="middle">${esc(s.end.label)}</text>`;
-  else { const L=wrapN(CAPO!=null?CAPO:formAt(c,s.p),13,240,2), up=stk?10:0, ent=s.p<0&&!LV.sid;
+  else { const L=wrapN(CAPO!=null?CAPO:formAt(c,s.p),13,260,4), up=stk?10:0, ent=s.p<0&&!LV.sid;   /* 入口原料说明可能很长：放宽到 4 行，不截断（11-27） */
     const ax=ent?TK.x+13:TK.x, an=ent?'end':'middle', yb=TK.y; o+=L.map((t,i)=>`<text class="tcap" x="${ax}" y="${yb-24-up-(L.length-1-i)*17}" text-anchor="${an}">${esc(t)}</text>`).join('');
     if(lp) o+=`<text class="tcap lp" x="${ax}" y="${yb-24-up-L.length*17}" text-anchor="${an}">${esc(lp)}</text>`; }
   /* 进出盒中盒：两层的世界坐标比例不同，货和字按屏幕大小从起点平滑过渡到终点，不会一下变大变小 */
@@ -1758,6 +1777,8 @@ function boxRect(){ let a=1e9,b=1e9,c=-1e9,d=-1e9; Object.values(N).forEach(n=>{
   (LV.ins||[]).forEach(z=>put(z.id,z.wall,z.q,{entry:true,from:z.from,gl:gl(z.bw)}));
   (LV.products||[]).filter(p=>!p.stub).forEach(p=>put('P:'+p.id,p.wall,p.q,{gl:gl(p.bw)}));
   (LV.products||[]).filter(p=>p.stub).forEach(p=>put('P:'+p.id,'b',null,{gl:34,stub:true,stubLabel:p.name}));
+  /* 短桩错行（11-27：6 个出口的结局字挤成一排互相压住）：从左往右，越靠左的桩越长、字越往下，字从桩右侧开始写，右边的短桩够不到左边那几行字 */
+  { const sb=Object.values(N).filter(n=>n.term&&n.stub).sort((u,v)=>u.x-v.x); sb.forEach((n,i)=>n.srow=sb.length-1-i); }
   return {a,b,c,d}; }
 /* 连到开口的带子：从站的那一侧出发，正对着开口进墙（一个拐弯以内的 Z 形） */
 function routeTerms(){ EDGES.forEach(e=>{ const A=N[e.a], B=N[e.b]; if(!A||!B||!(A.term||B.term)) return;
@@ -1781,7 +1802,7 @@ function boxSvg(){ if(!BOX) return ''; const {a,b,c,d}=BOX, r=16, ops=Object.val
   seg(b+r,d-r,G.l).forEach(([u,v])=>p+=`M${a} ${u}V${v}`); seg(b+r,d-r,G.r).forEach(([u,v])=>p+=`M${c} ${u}V${v}`);
   p+=`M${a} ${b+r}A${r} ${r} 0 0 1 ${a+r} ${b}M${c-r} ${b}A${r} ${r} 0 0 1 ${c} ${b+r}M${c} ${d-r}A${r} ${r} 0 0 1 ${c-r} ${d}M${a+r} ${d}A${r} ${r} 0 0 1 ${a} ${d-r}`;
   let j=''; ops.forEach(n=>{ const L=(n.gl||40)/2, [ox,oy]=OUTV[n.wall]; if(n.wall==='t'||n.wall==='b') [n.x-L,n.x+L].forEach(x=>j+=`M${x} ${n.y}v${oy*14}`); else [n.y-L,n.y+L].forEach(y=>j+=`M${n.x} ${y}h${ox*14}`); });
-  const stubs=ops.filter(n=>n.stub).map(n=>`<path class="istub" d="M${n.x} ${n.y}V${n.y+40}"/><text class="istt" x="${n.x}" y="${n.y+60}" text-anchor="middle">${esc(n.stubLabel)}</text>`).join('');
+  const stubs=ops.filter(n=>n.stub).map(n=>{ const yb=n.y+40+(n.srow||0)*20; return `<path class="istub" d="M${n.x} ${n.y}V${yb}"/><text class="istt" x="${n.x+18}" y="${yb+4.5}">${esc(n.stubLabel)}</text>`; }).join('');
   const lane=n=>{ const same=ops.filter(z=>z.wall===n.wall).sort((u,v)=>(n.wall==='t'||n.wall==='b')?u.x-v.x:u.y-v.y); return same.indexOf(n)%2; };
   /* 入口字写在墙外：墙里紧挨着就是入口站的卡 */
   const ent=ops.filter(n=>n.entry).map(n=>{ const k=lane(n)*18, L=(n.gl||40)/2, tx=n.wall==='l'?n.x-14:n.wall==='r'?n.x+14:n.x+L+8, ty=(n.wall==='t'?n.y-12-k:n.wall==='b'?n.y+24+k:n.y+L+20+k);
@@ -1945,7 +1966,7 @@ function renderSmp(){ const c=C(); $('#railhd').hidden=!c; if(!c){ $('#smpBtn').
   $('#smpBtn').innerHTML=`<span class="mini">${esc(c.badge||c.name[0])}</span><span class="nm">${esc(c.name)}</span><span class="st"></span><span class="cv2">▾</span>`;
   /* 一行：徽标 · 标题 / 第二行 · 右侧结局胶囊（按结局着色）。路线的标题是它的说明，第二行是它经过哪几站 */
   const ocK=o=>o.k==='prod'||o.k==='done'?(o.taint?'warn':'ok'):o.k==='exit'?'info':o.k==='returned'||o.k==='move'?'mut':o.k==='blocked'||o.k==='wait'?'warn':'bad';   /* 完成 / 进成品库 绿，出站 蓝，等人 / 等下一轮 黄，退回 灰，失败 / 卡死 红 */
-  const ocT=o=>o.k==='prod'?(o.taint?'进成品库·带病':'进成品库'):o.k==='exit'?o.label:ENDK[o.k]||o.label;
+  const ocT=o=>o.k==='prod'?vocab(o.taint?'进成品库·带病':'进成品库'):o.k==='exit'?o.label:ENDK[o.k]||o.label;
   const via=x=>{ const L=x.path[x.path.length-1], nm=L&&S[L.st]?S[L.st].name:''; return `共 ${x.path.length} 站，到「${nm}」`; };   /* 路线开头大多相同，写站数和走到哪一站才分得开 */
   const item=(x,route)=>{ const o=outcome(x), t1=route?(x.desc||x.name):x.name, t2=route?via(x):(x.desc||via(x));
     return `<div class="soW"><button type="button" class="so${x.id===st.cur?' on':''}" data-play="${esc(x.id)}"><span class="mini">${esc(x.badge||x.name[0])}</span><span class="tt"><span class="t1">${esc(t1)}</span><span class="t2">${esc(t2)}</span></span><span class="oc k-${ocK(o)}">${esc(ocT(o))}</span></button>${x.saved?`<button type="button" class="lnk sodel" data-del="${esc(x.id)}" aria-label="删除收藏「${esc(x.name)}」">删除</button>`:''}</div>`; };
@@ -1977,7 +1998,7 @@ function zoomInterp(p0,p1,rho=1.4){ const [ux0,uy0,w0]=p0,[ux1,uy1,w1]=p1, dx=ux
   return t=>{ const s=t*S0, ch=Math.cosh(q0), u=w0/(r2*d1)*(ch*Math.tanh(rho*s+q0)-Math.sinh(q0)); return [ux0+u*dx,uy0+u*dy,w0*ch/Math.cosh(rho*s+q0)]; }; }
 function zoomAt(f,px,py){ cancelAnimationFrame(camTo.raf); camTo.raf=null; const k=clamp(cam.k*f,.08,2.2), wx=(px-cam.x)/cam.k, wy=(py-cam.y)/cam.k; cam.x=px-wx*k; cam.y=py-wy*k; cam.k=k; applyCam(); }
 function sideW(){ return $('#side').classList.contains('open')&&matchMedia('(min-width:1100px)').matches?$('#side').offsetWidth+20:0; }
-function centerOn(wx,wy,k,ms){ const r=cvR(); const k1=k||cam.k; camTo((r.width-sideW())/2-wx*k1,(r.height-56)/2-wy*k1,k1,ms==null?500:ms); }
+function centerOn(wx,wy,k,ms){ const r=cvR(); const k1=k||cam.k, L=railW(); camTo(L+(r.width-sideW()-L)/2-wx*k1,(r.height-56)/2-wy*k1,k1,ms==null?500:ms); }
 /* 跟随：货离开画面中间的安全框就把镜头往回带 */
 function followTick(snap){ if(!st.follow||camTo.raf||boxTween.raf) return; const r=cvR(); const W=r.width-sideW(), H=r.height-56; const sx=TK.x*cam.k+cam.x, sy=TK.y*cam.k+cam.y;
   const inb=LSTACK.length>0, dz=st.cur==='drill'?.1:.2, x0=inb?16+railW():Math.max(W*(.5-dz),railW()+20), x1=inb?W-16:W*(.5+dz), y0=inb?70:H*(.5-dz-.02), y1=inb?H-40:H*(.5+dz+.02);
@@ -2105,10 +2126,10 @@ function stationHtml(id){ const s=S[id]; if(!s) return '<p class="does">点画�
     ${MEM[id]?memberHtml(id):''}${s.modes&&s.modes.length>1?modesHtml(s):''}${VIA(id).length?`<p class="does">所有走 ${VIA(id).map(L=>'「'+esc(L.name)+'」').join('、')} 的货都先过这一站。</p>`:''}
     <div class="sh">岔路</div><ul class="brs">${rows.join('')}</ul>
     ${irr.length?`<div class="sh" style="margin-top:12px">做了收不回的动作</div><ul class="brs">${irr.join('')}</ul>`:''}
-    <details class="more"><summary>${s.detail?'细节、':''}货的样子、读写、代码位置</summary>
+    <details class="more"><summary>${s.detail?'细节、':''}货的样子、读写<span class="dev">、代码位置</span></summary>
       ${s.detail?`<p class="does" style="margin:8px 0 0">${esc(s.detail)}</p>`:''}
       ${s.input||s.output?`<div class="ioo"><div><b>进来</b>${esc(s.input||'—')}</div><span>→</span><div><b>出去</b>${esc(s.output||'—')}</div></div>`:''}${ws}
-      <div class="ml">代码位置</div><code>${esc(s.code||'没写')}</code></details>
+      <div class="dev"><div class="ml">代码位置</div><code>${esc(s.code||'没写')}</code></div></details>
     <p style="margin:10px 0 0"><button type="button" class="lnk" data-fb="${esc(id)}.station">对这一站有疑问？反馈</button></p>${st.fb&&st.fb.key===id+'.station'?fbForm():''}`; }
 /* 组：谁和谁同时处理、怎样才往下、一方退回后其余几方怎样、谁可能不在；下面列出组的几种结果（就是演练和全部路线里的选项） */
 function groupHtml(id){ const s=S[id], G=s.group, nx=nextOf(id), nxn=nx?(nx.startsWith('P:')?'进「'+((PROD[nx.slice(2)]||{}).name||'')+'」':'「'+((S[nx]||{}).name||'')+'」'):'下一站';
@@ -2117,7 +2138,7 @@ function groupHtml(id){ const s=S[id], G=s.group, nx=nextOf(id), nxn=nx?(nx.star
   return `<div class="h3"><h3>${esc(G.name)}</h3><span class="kt">几方同时处理</span></div>
     <p class="does">${esc(G.members.map(who).join('、'))} 同时收到这件货，各自处理；都通过才往${esc(nxn)}。</p>
     <div class="sh">谁在处理</div><ul class="brs">${G.members.map(m=>`<li class="br"><button type="button" class="row" data-gm="${esc(m)}"><i class="dot"></i><span class="bt"><span class="wt">${esc(S[m].name)}${S[m].actor?'<span class="tag df">'+esc(S[m].actor)+'</span>':''}${S[m].optional?'<span class="tag">可能不在</span>':''}</span></span><span class="to">看这一方 ›</span></button></li>`).join('')}</ul>
-    <div class="sh" style="margin-top:12px">规则</div><dl class="fdl"><dt>往下走</dt><dd>每一方都通过，货并回一件去${esc(nxn)}</dd><dt>有一方退回</dt><dd>货按退回那一方的岔路走；几方同时退回时，按上面列表里靠前的那一方</dd><dt>其余几方</dt><dd>${G.on==='stop'?'一方退回，其余几方立即停下':'一方退回，其余几方照常处理完'}（只影响动画和说明，去向都按退回那一方）</dd>${opt.map(m=>`<dt>${esc(who(m))} 不在时</dt><dd>${esc(S[m].optional)}</dd>`).join('')}</dl>
+    <div class="sh" style="margin-top:12px">规则</div><dl class="fdl"><dt>往下走</dt><dd>每一方都通过，货并回一件去${esc(nxn)}</dd><dt>有一方${esc(G.ret)}</dt><dd>按${esc(G.ret)}那一方的去向走；几方同时${esc(G.ret)}时，按上面列表里靠前的那一方</dd><dt>其余几方</dt><dd>${esc(G.labels.on_return||(G.on==='stop'?'一方'+G.ret+'，其余几方立即停下':'一方'+G.ret+'，其余几方照常处理完'))}</dd>${opt.map(m=>`<dt>${esc(who(m))} 不在时</dt><dd>${esc(S[m].optional)}</dd>`).join('')}</dl>
     <div class="sh" style="margin-top:12px">几种结果</div><ul class="brs">${rows.join('')}</ul>
     <p style="margin:10px 0 0"><button type="button" class="lnk" data-fb="${esc(id)}.station">对这个组有疑问？反馈</button></p>${st.fb&&st.fb.key===id+'.station'?fbForm():''}`; }
 function memberHtml(id){ const g=MEM[id], G=GRP[g], who=m=>S[m].actor||S[m].name, others=G.members.filter(m=>m!==id).map(who);
@@ -2167,8 +2188,10 @@ function fbCopy(){ const f=st.fb; const inp=$('#fbn'); if(inp) f.note=inp.value.
 document.addEventListener('input',e=>{ if(e.target.id==='fbn'&&st.fb) st.fb.note=e.target.value; });
 
 /* ════════ 视图与图例 ════════ */
-function VIEWS(){ const fl=RULE?'关卡':'故障', v=LV.sid?[['flow','流程'],['fault',fl]]:[['flow','流程'],['write','写入'],['fault',fl]]; if(D.runs&&!LV.sid) v.push(['run','运行']); if(LINES.length>=2&&!LV.sid) v.push(['metro','总览']); return v; }
-function renderSegs(){ $('#viewSeg').innerHTML=VIEWS().map(([k,l])=>`<button type="button" role="tab" data-view="${k}" aria-selected="${st.view===k}" class="${st.view===k?'on':''}">${l}</button>`).join('');
+function VIEWS(){ const fl=RULE?'关卡':'故障'; let v=LV.sid?[['flow','流程'],['fault',fl]]:[['flow','流程'],['write','写入'],['fault',fl]]; if(D.runs&&!LV.sid) v.push(['run','运行']); if(LINES.length>=2&&!LV.sid) v.push(['metro','总览']);
+  if(Array.isArray(D.views)&&D.views.length) v=v.filter(([k])=>k==='flow'||D.views.includes(k));   /* views：只开这几个视图（对外的图常常只要「流程」，11-27） */
+  return v; }
+function renderSegs(){ $('#viewSeg').classList.toggle('one',VIEWS().length<2); $('#viewSeg').innerHTML=VIEWS().map(([k,l])=>`<button type="button" role="tab" data-view="${k}" aria-selected="${st.view===k}" class="${st.view===k?'on':''}">${l}</button>`).join('');
   const lg=$('#legend');
   lg.classList.toggle('can',st.view==='flow'&&soloAble());
   if(st.view==='flow') lg.innerHTML=LINES.length?LINES.map((L,i)=>`<span data-lg="${i}" title="${esc([L.every?'⟳ '+L.every:'',L.via&&S[L.via]?'先过「'+S[L.via].name+'」':'',L.trigger||'',L.per||''].filter(Boolean).join(' · ')||'指着它：这条线的站和带子突出')}${soloAble()?'；点它：只演这条流程':''}"><i class="sw" style="background:${L.color}"></i>${esc(L.name)}${L.every?' · ⟳ '+esc(L.every):''}</span>`).join('')+(()=>{ const n=Object.values(S).filter(x=>x.planned).length; return n?`<span data-plan="1" class="${st.hidePlan?'on':''}" title="点线框的站还没上线；点一下淡化它们，看现在线上的样子">点线框 = 待上线 ${n} 站${st.hidePlan?' · 已淡化':''}</span>`:''; })():'';
@@ -2183,7 +2206,7 @@ function renderSegs(){ $('#viewSeg').innerHTML=VIEWS().map(([k,l])=>`<button typ
     else { const c={retry:0,human:0,degrade:0,stop:0,stuck:0,none:0}; ids.forEach(id=>faultsOf(S[id]).forEach(({k})=>c[k]++));
       lg.innerHTML=Object.keys(c).map(k=>`<span><i class="sw" style="background:${({retry:'var(--info)',human:'var(--warn)',degrade:'var(--warn)',stop:'var(--bad)',stuck:'var(--bad)',none:'transparent;border:1px dashed var(--tx3)'})[k]}"></i>${FK[k]} <b class="num">${c[k]}</b></span>`).join('')+'<span class="hint">有这种出口的站数</span>'+seg; } }
   sizeCv(); }
-function toast(t){ const el=$('#toast'); el.textContent=t; el.classList.add('on'); clearTimeout(toast.h); toast.h=setTimeout(()=>el.classList.remove('on'),2600); }
+function toast(t){ const el=$('#toast'); el.textContent=vocab(t); el.classList.add('on'); clearTimeout(toast.h); toast.h=setTimeout(()=>el.classList.remove('on'),2600); }
 
 /* ════════ 事件 ════════ */
 document.addEventListener('click',e=>{ const t=e.target.closest('button');
@@ -2259,6 +2282,8 @@ function selfCheck(){ const R=[], add=(n,pass,why)=>R.push({n,pass,why:why||''})
   { const d=document.querySelector('.dock').getBoundingClientRect(); add('播放栏在首屏内',d.bottom<=innerHeight+1&&d.top>=0,Math.round(d.bottom)+' > '+innerHeight); }
   const lost=Object.keys(S).filter(id=>!N[id]); add('每站都画出来了',!lost.length,lost.join('、'));
   const np=EDGES.filter(e=>!e.pts).map(e=>e.a+'>'+e.b); add('每条带子都有路线',!np.length,np.join('、'));
+  { const lim=CW+40, over=[]; GIVEN.forEach(c=>(c.path||[]).forEach(p=>{ if(p.form&&wrapN(p.form,13,lim,3).some(l=>txtW(l,13)>lim+1)) over.push(c.name+'@'+((S[p.st]||{}).name||p.st)); }));
+    add('货的说明字放得下（卡下方 3 行内，不截断）',!over.length,over.slice(0,6).join('、')); }
   add('页面不横向滚动',document.documentElement.scrollWidth<=innerWidth+1,document.documentElement.scrollWidth+' > '+innerWidth);
   window.__selfcheck=R; document.documentElement.dataset.selfcheck=R.filter(x=>x.pass).length+'/'+R.length;
   try{ console.info('[自检] '+document.documentElement.dataset.selfcheck+(R.some(x=>!x.pass)?' 未通过：'+R.filter(x=>!x.pass).map(x=>x.n+'（'+x.why+'）').join('；'):' 全部通过')); }catch(e){} }
@@ -2281,6 +2306,7 @@ function applySkin(k,announce,once){ const sk=SKINS.find(x=>x.k===k||x.n===k)||S
   delete r.dataset.skin; delete r.dataset.theme;
   if(sk.k==='light'||sk.k==='dark') r.dataset.theme=sk.k; else if(sk.k!=='auto') r.dataset.skin=sk.k;
   const wasCalm=r.hasAttribute('data-calm'); r.toggleAttribute('data-calm',sk.k==='report'); calmWake();
+  { const u=URLP.minimap, f=D.minimap; r.toggleAttribute('data-nomm',u!=null?u==='0':f!=null?f===false:sk.k==='report'); }
   if(!once) store.set('skin',sk.k); const b=$('#themeBtn'); if(b) b.innerHTML=`${sw5(sk.c)} 配色 · ${esc(sk.n)}`;
   const pop=$('#skinPop'); if(pop) pop.innerHTML=SKINS.map(x=>`<button type="button" class="skc${x.k===sk.k?' on':''}" data-skin="${x.k}">${sw5(x.c)}<b>${esc(x.n)}</b><span class="ck">${x.k===sk.k?'在用':''}</span><span class="d">${esc(x.d)}</span></button>`).join('');
   if(announce&&wasCalm!==(sk.k==='report')&&typeof N!=='undefined'&&Object.keys(N).length){ try{ stopTok(); PROC=null; PROC_OUT=null; world.querySelectorAll('.card.proc,.prod.proc').forEach(g=>g.classList.remove('proc')); setBeat(st.beat,false); }catch(e){} }
@@ -2288,6 +2314,9 @@ function applySkin(k,announce,once){ const sk=SKINS.find(x=>x.k===k||x.n===k)||S
 if(URLP.skin&&SKINS.some(x=>x.k===URLP.skin||x.n===URLP.skin)) applySkin(URLP.skin,false,true);
 else if(D.skin&&SKINS.some(x=>x.k===D.skin)) applySkin(D.skin,false,true);   /* flow.json 写了 skin：交给别人的页面打开就是这个配色，不看对方浏览器记住的 */
 else applySkin(store.get('skin')||(store.get('theme')==='dark'?'dark':store.get('theme')==='light'?'light':'auto'));
+/* 叫法：页面里写死的界面文字（页签、按钮提示、配色说明）也换一遍；标题、副标题是作者的数据，下面才填，不换 */
+if(VOC.on){ const tw=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,{acceptNode:n=>n.parentElement.closest('script,#flow-data,#world,#ttl,#sub')?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT}); let n; while(n=tw.nextNode()) n.textContent=vocab(n.textContent);
+  document.querySelectorAll('[title],[aria-label]').forEach(e=>{ ['title','aria-label'].forEach(a=>{ if(e.hasAttribute(a)&&!e.closest('#world')) e.setAttribute(a,vocab(e.getAttribute(a))); }); }); }
 document.title=D.title||document.title; $('#ttl').textContent=D.title||''; $('#sub').textContent=(D.page==='monitor'?'运行监控图 · ':'')+(D.subtitle||'');
 $('#helpPop').innerHTML=`<b>怎么看这张图</b><ul>
   <li>一进来先看全图；随后镜头推到入口，演一件样例货，演完自动换下一件</li>
@@ -2306,6 +2335,7 @@ $('#helpPop').innerHTML=`<b>怎么看这张图</b><ul>
   <li>每条出错去向都有「反馈」，生成一段文字贴回和 AI 的对话</li>
   <li>快捷键：空格 播放 / 暂停，逗号 退一步，句号 走一步，[ ] 慢一档 / 快一档，Esc 关面板</li></ul>`;
 if(D.compare&&(D.compare.items||[]).length) $('#cmpBtn').hidden=false;
+document.documentElement.toggleAttribute('data-public',D.audience==='public'||URLP.audience==='public');
 /* 链接参数里的视图、只演这条、哪件货 */
 if(URLP.view&&VIEWS().some(([k])=>k===URLP.view)) st.view=URLP.view;
 if(URLP.solo) st.solo=URLP.solo!=='0';

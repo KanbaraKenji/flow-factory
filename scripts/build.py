@@ -18,14 +18,14 @@ LEVELS = {'ok', 'risk', 'bad'}
 IRR = {'delete', 'overwrite', 'send'}
 STORE_KINDS = {'db', 'kv', 'file', 'queue', 'api', 'log', 'notify'}
 KEYS = {
-    'top': {'schema', 'page', 'title', 'subtitle', 'summary', 'source', 'lines', 'stations', 'products', 'stores', 'samples', 'layout', 'runs', 'skin', 'vocab', 'groups'},
+    'top': {'schema', 'page', 'title', 'subtitle', 'summary', 'source', 'lines', 'stations', 'products', 'stores', 'samples', 'layout', 'runs', 'skin', 'vocab', 'groups', 'views', 'audience', 'minimap'},
     'line': {'id', 'name', 'color', 'stations', 'product', 'then', 'trigger', 'per', 'via', 'every'},
     'station': {'name', 'kind', 'actor', 'highlight', 'decide', 'planned', 'does', 'detail', 'input', 'output', 'code', 'writes', 'reads', 'irreversible', 'default', 'branches', 'unhandled', 'runs', 'inner', 'split', 'join', 'modes', 'optional'},
     'inner': {'lines', 'stations', 'layout', 'samples', 'groups'},
     'branch': {'k', 'when', 'to', 'end', 'exit', 'fault', 'writes', 'runs', 'count', 'only', 'head'},
     'sample': {'id', 'name', 'badge', 'desc', 'input', 'path'},
     'step': {'st', 'br', 'form', 'in', 'mode', 'n', 'each'},
-    'group': {'id', 'name', 'mode', 'stations', 'on_return'},
+    'group': {'id', 'name', 'mode', 'stations', 'on_return', 'labels'},
 }
 ON_RETURN = {'others_continue', 'others_stop'}
 
@@ -167,8 +167,23 @@ def validate(d, ctx=None):
         if too_long((d.get('summary') or {}).get(k), 'summary'):
             W(f'summary.{k} 太长（≤ {LIMITS["summary"]} 字）')
     SKINS = {'auto', 'light', 'dark', 'report', 'blueprint', 'dyson', 'factorio', 'oni', 'harvest', 'stone'}
-    if not ctx and d.get('vocab') not in (None, 'fault', 'rule'):
-        W(f'vocab「{d["vocab"]}」不认识：rule = 业务规则图（视图叫「关卡」，不显示关注等级），不写 = 代码图（视图叫「故障」）')
+    voc = d.get('vocab')
+    if not ctx and isinstance(voc, dict):
+        bad = sorted(set(voc) - {'base', 'kind', 'product', 'cargo', 'sample', 'branch', 'trigger'})
+        if bad:
+            W(f'vocab 里有不认识的键 {bad}：可写 base（rule）、kind（{{"in": "提交", ...}}）、product、cargo、sample、branch、trigger')
+        if voc.get('base') not in (None, 'rule', 'fault'):
+            W(f'vocab.base「{voc["base"]}」只能是 rule 或不写')
+        if not isinstance(voc.get('kind', {}), dict) or set(voc.get('kind', {})) - KINDS:
+            W(f'vocab.kind 要写成 {{"站的种类": "叫法"}}，种类只能是 {sorted(KINDS)}')
+    elif not ctx and voc not in (None, 'fault', 'rule'):
+        W(f'vocab「{voc}」不认识：rule = 业务规则图（视图叫「关卡」，不显示关注等级），也可写对象逐词改叫法；不写 = 代码图（视图叫「故障」）')
+    if not ctx and d.get('views') is not None and (not isinstance(d['views'], list) or set(d['views']) - {'flow', 'write', 'fault', 'run', 'metro'}):
+        W('views 要写成数组，只能含 flow write fault run metro（「流程」视图总在）')
+    if not ctx and d.get('audience') not in (None, 'public', 'dev'):
+        W(f'audience「{d["audience"]}」只能是 public（对外页：关掉寻路、对比、操作说明、反馈、代码位置）或不写')
+    if not ctx and 'minimap' in d and not isinstance(d['minimap'], bool):
+        W('minimap 写 true / false')
     if not ctx and d.get('skin') and d['skin'] not in SKINS:
         W(f'skin「{d["skin"]}」不认识，页面会按浏览器记住的配色打开；可选 {sorted(SKINS)}')
     if not ctx and d.get('title') and not (2 <= cjk_len(d['title']) <= 12.5):
@@ -247,6 +262,9 @@ def validate(d, ctx=None):
             W(gw + f' 的名字「{g["name"]}」太长（≤ 8 字），框上放不下')
         if g.get('mode', 'all') != 'all':
             E(gw + f' 的 mode「{g.get("mode")}」不认识：目前只有 "all"（都通过才往下）')
+        lb = g.get('labels')
+        if lb is not None and (not isinstance(lb, dict) or set(lb) - {'rule', 'on_return'}):
+            W(f'组「{g.get("id")}」的 labels 只认 rule（框顶的规则，比如「三方都通过才能往下」）和 on_return（一方不通过后其余怎样）')
         if g.get('on_return') is not None and g['on_return'] not in ON_RETURN:
             E(gw + f' 的 on_return 要是 {sorted(ON_RETURN)} 之一（一方退回后其余几方照常处理完 / 立即停下）')
         ms = g.get('stations')
@@ -354,7 +372,7 @@ def validate(d, ctx=None):
         if 'decide' in s and not isinstance(s['decide'], bool):
             W(where + ' 的 decide 写 true / false')
         pv = prev_of.get(sid)
-        if s.get('kind') == 'gate' and re.search(r'系统|后端|服务|自动|server|backend|system|api', str(s.get('actor') or ''), re.I) and pv in S and S[pv].get('kind') in ('in', 'hand'):
+        if not ctx and s.get('kind') == 'gate' and re.search(r'系统|后端|服务|自动|server|backend|system|api', str(s.get('actor') or ''), re.I) and pv in S and S[pv].get('kind') in ('in', 'hand'):
             W(where + f' 是系统闸门，紧跟在「{S[pv].get("name", pv)}」后面：是不是那一站提交时当场做的检查？是的话写进那一站的 inner，不单独成站（独立运行的定时任务、另一个进程、另一个人把关才单独成站）')
         if s.get('kind') not in KINDS:
             E(where + f' 的 kind「{s.get("kind")}」不在 {sorted(KINDS)} 里')

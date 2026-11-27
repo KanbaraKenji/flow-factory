@@ -11,6 +11,10 @@
   "vocab": "rule",               // 可省：叫法。rule = 业务规则图——岔路是规则本身（驳回、退件、缺料不能过），不是出错：「故障」视图改叫「关卡」，
                                  //   卡上小标按货被拦到哪写（退回修改 / 退回发起人 / 不能继续 / 回原站 / 转「某站」），不显示关注等级，面板里「判断」改叫「说明」。
                                  //   岔路照样写 fault（when / user_sees / verdict.note），只是换了叫法。不写 = 代码图
+                                 //   rule 默认还把界面上的「货」叫「单子」、「成品库」叫「完成」、「样例货」叫「样例」、「岔路」叫「去向」，站的种类叫 提交 / 处理 / 审核 / 检查 / 人工 / AI / 结束。
+                                 //   要逐词改就写对象：{ "base": "rule", "kind": { "in": "提交", "step": "系统", "hand": "操作", "out": "结单" },
+                                 //                      "product": "完成", "cargo": "订单", "sample": "样例", "branch": "去向", "trigger": "入口" }
+                                 //   只改界面上的固定说法，作者写的站名、条件、样例货原样显示
   "title": "网店订单处理",        // 页面标题，2~12 字
   "subtitle": "从下单到签收 · 样例货为虚构",
   "summary": {                   // 一眼看懂「从什么到什么」：帮你定范围用，页面不显示（2026-10-26 页头减法）
@@ -32,6 +36,9 @@
   "samples": [ ... ],            // 可选。样例货：几件典型的输入；不写则自动播放演遍全部路线
   "layout": { "cols": 6 },       // 可省：强制每行几站（3~10）。不写就按画布宽高比自动挑
   "skin": "report",              // 可省：页面打开时的配色（auto light dark report blueprint dyson factorio oni harvest stone）。写了就不看对方浏览器记住的配色；链接参数 skin= 仍然优先
+  "views": ["flow"],             // 可省：只开这几个视图（flow write fault run metro；「流程」总在）。只剩一个视图时页签也不显示
+  "audience": "public",          // 可省：对外页。关掉给出图人和开发者用的入口：寻路、对比上一版、操作说明、每站和每条岔路的「反馈」、面板里的代码位置、演练里的「复制成样例货」
+  "minimap": false,              // 可省：右下小地图。汇报配色默认不显示，其余配色默认显示；写 true / false 固定；链接参数 minimap=0 / 1 优先
   "runs": { ... }                // 可省：运行记录，见文末
 }
 ```
@@ -234,7 +241,9 @@
 "groups": [ { "id": "review", "name": "三方审核",            // name ≤ 8 字，写在框顶上
               "mode": "all",                                // 目前只有 all：都通过才往下（可省）
               "stations": ["qe", "ie", "smp"],              // 同时处理的那几方，按这个顺序竖排；两方以上
-              "on_return": "others_continue" } ],           // 一方退回后其余几方：others_continue 照常处理完（默认）/ others_stop 立即停下
+              "on_return": "others_continue",               // 一方退回后其余几方：others_continue 照常处理完（默认）/ others_stop 立即停下
+              "labels": { "rule": "三方都通过才能制作",          // 可省：框顶的那句规则（默认「组名 · 都通过才往下」）
+                          "on_return": "一方驳回，其余两方仍可审完" } } ],   // 可省：一方不通过后其余怎样（默认从各方不通过那条岔路的 when 里取「驳回 / 退回 / 否决…」）
 "lines": [ { "id": "main", "stations": ["open", "review", "make", "close"], "product": "done" } ],   // 线里写组 id，占一个位置
 "stations": {
   "qe":  { "name": "QE 审核", "kind": "check", "actor": "QE", ..., "default": "ok", "branches": [

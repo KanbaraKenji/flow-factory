@@ -142,6 +142,9 @@
   "expect": "warn",
   "contains": "站「wake」站内：站「w1」 没写 inp"
  },
+ "ok_inner_many_stubs.json": {
+  "expect": "clean"
+ },
  "ok_inner_three_levels.json": {
   "expect": "warn",
   "contains": "站「pay/wait_cb」站内：站「pol"
@@ -156,6 +159,9 @@
   "expect": "clean"
  },
  "ok_parallel_review.json": {
+  "expect": "clean"
+ },
+ "ok_public_report.json": {
   "expect": "clean"
  },
  "ok_rule_vocab.json": {

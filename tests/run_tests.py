@@ -99,7 +99,7 @@ def main():
             run_build(os.path.join(FIX, 'ok_parallel_review.json'), '-o', grp)
             for extra in (['--sample', 's2', '--beat', '2'], ['--sample', 's3', '--beat', '3', '--skin', 'report'], ['--view', 'fault', '--station', 'review'], ['--hash', 'drill=1', '--size', '390x844']):
                 r = subprocess.run([node, CHECK, grp, *extra], capture_output=True, text=True, encoding='utf-8', errors='replace')
-                good = r.returncode == 0 and '"6/6"' in r.stdout
+                good = r.returncode == 0 and '"fail":[]' in r.stdout
                 print(('  通过  ' if good else '  不符  ') + f'无头 会签组 {" ".join(extra)}：{" ".join(r.stdout.strip().splitlines()[-2:])}')
                 if not good:
                     fails.append('headless group ' + ' '.join(extra))

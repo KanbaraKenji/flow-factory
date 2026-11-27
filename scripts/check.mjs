@@ -12,13 +12,15 @@
 //   --focus <站 id> [--zoom 1.2]   镜头对准某站
 //   --fit                  截全图
 //   --shot out.png         截图
+//   --drill "站:岔路,站:岔路" 进演练并按顺序选路，走完再截图（停在下一个选项板或结局）。会签组写「组:都通过的键」或「组:一方:岔路」，
+//                          比如 --drill "open:ok,review:qe:back"；只有一条路的站会自动走过，可写可不写
 //   --timeout 60           整个检查最多等几秒，超时以失败退出（退出码 3）
 // 不带视图类参数时截的是页面打开约 2.6 秒后的样子（已推到入口开演第一件）。
 // 退出码：0 通过；1 自检没过或页面有报错；2 用法错 / 找不到浏览器；3 超时。
 // 需要 Node 18+（自带 WebSocket 用 Node 22；更早版本请装 ws 包）与本机 Chrome / Edge。只读，不改页面。
 import {spawn} from 'node:child_process'; import fs from 'node:fs'; import path from 'node:path'; import os from 'node:os';
 const args=process.argv.slice(2);
-const VAL=['size','theme','skin','hash','speed','view','sample','beat','station','focus','zoom','shot','timeout'], FLAG=['fit'];
+const VAL=['size','theme','skin','hash','speed','view','sample','beat','station','focus','zoom','shot','timeout','drill'], FLAG=['fit'];
 const bad=[], o={}; let file=null;
 for(let i=0;i<args.length;i++){ const a=args[i];
   if(a.startsWith('--')){ const k=a.slice(2);
@@ -34,7 +36,9 @@ if(o.view&&!['flow','write','fault','run','metro'].includes(o.view)) bad.push('-
 if(o.beat!=null&&!/^\d+$/.test(o.beat)) bad.push('--beat 要是整数');
 if(o.timeout!=null&&!(+o.timeout>0)) bad.push('--timeout 要是正数（秒）');
 if(o.speed!=null&&![.5,.75,1,1.25,1.5,2].includes(+o.speed)) bad.push('--speed 只能是 0.5 0.75 1 1.25 1.5 2');
-if(bad.length){ console.error(bad.join('\n')+'\n用法：node check.mjs page.html [--size 1440x900] [--theme light|dark] [--skin report] [--hash "skin=report&drill=1"] [--speed 1] [--view fault] [--sample s1] [--beat 3] [--station id] [--focus id --zoom 1.2] [--fit] [--shot out.png] [--timeout 60]'); process.exit(2); }
+if(o.drill&&!/^[^:,\s]+:[^,\s]+(,[^:,\s]+:[^,\s]+)*$/.test(o.drill)) bad.push('--drill 要写成 站:岔路,站:岔路（逗号分开，不要空格）');
+if(o.drill&&(o.sample||o.beat!=null)) bad.push('--drill 不能和 --sample / --beat 一起用');
+if(bad.length){ console.error(bad.join('\n')+'\n用法：node check.mjs page.html [--size 1440x900] [--theme light|dark] [--skin report] [--hash "skin=report&drill=1"] [--speed 1] [--view fault] [--sample s1] [--beat 3] [--drill \"站:岔路,…\"] [--station id] [--focus id --zoom 1.2] [--fit] [--shot out.png] [--timeout 60]'); process.exit(2); }
 
 const [W,H]=(o.size||'1440x900').split('x').map(Number);
 const cands=[process.env.CHROME,'C:/Program Files/Google/Chrome/Application/chrome.exe','C:/Program Files (x86)/Google/Chrome/Application/chrome.exe','C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe','C:/Program Files/Microsoft/Edge/Application/msedge.exe','/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge','/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/usr/bin/chromium','/usr/bin/chromium-browser','/usr/bin/microsoft-edge'].filter(Boolean);
@@ -58,14 +62,31 @@ stage='打开页面';
 await C('Runtime.enable'); await C('Page.enable');
 await C('Emulation.setDeviceMetricsOverride',{width:W,height:H,deviceScaleFactor:1,mobile:W<600});
 await C('Emulation.setEmulatedMedia',{features:[{name:'prefers-color-scheme',value:o.theme||'light'}]});
-const hp=[]; if(o.hash) hp.push(o.hash.replace(/^#/,'')); if(o.skin) hp.push('skin='+encodeURIComponent(o.skin)); if(o.speed) hp.push('speed='+o.speed);
+const DR=o.drill?o.drill.split(',').map(x=>{ const i=x.indexOf(':'); return {st:x.slice(0,i),k:x.slice(i+1)}; }):null;
+const hp=[]; if(o.hash) hp.push(o.hash.replace(/^#/,'')); if(DR) hp.push('drill='+encodeURIComponent(DR[0].st)); if(o.skin) hp.push('skin='+encodeURIComponent(o.skin)); if(o.speed) hp.push('speed='+o.speed);
 const url='file:///'+path.resolve(file).replace(/\\/g,'/')+(hp.length?'#'+hp.join('&'):'');
 await C('Page.navigate',{url}); await sl(2600);
 const ev=async js=>{ const r=await C('Runtime.evaluate',{expression:js,awaitPromise:true,returnByValue:true}); if(r.result?.exceptionDetails) logs.push('检查脚本出错：'+(r.result.exceptionDetails.exception?.description||r.result.exceptionDetails.text).slice(0,300)); return r.result?.result?.value; };
+if(DR){ stage='走演练';
+  // 在页面里按顺序点选项板：当前问的站对上了就点那条岔路；只有一条路的站页面会自动走过，跳过它
+  const res=await ev(`(async()=>{ const W=ms=>new Promise(r=>setTimeout(r,ms)), steps=${JSON.stringify(DR)}, log=[];
+    const board=()=>{ const b=document.getElementById('board'); return b&&!b.hidden&&b.querySelector('[data-pick]')?b:null; };
+    for(const s of steps){ let ok=false;
+      for(let t=0;t<150;t++){ const b=board(), cur=DRILL.path.length?DRILL.path[DRILL.path.length-1].st:null;
+        if(b&&cur===s.st){ const btn=[...b.querySelectorAll('[data-pick]')].find(x=>x.dataset.pick===s.k);
+          if(!btn) return {err:'「'+((S[s.st]||{}).name||s.st)+'」没有岔路 '+s.k+'，可选：'+[...b.querySelectorAll('[data-pick]')].map(x=>x.dataset.pick).join(' ')};
+          btn.click(); log.push(s.st+':'+s.k); ok=true; break; }
+        if(b&&DRILL.path.slice(0,-1).some(p=>p.st===s.st)){ log.push(s.st+'（自动走过）'); ok=true; break; }
+        if(DRILL.done) return {err:'演练已经走完，还剩 '+s.st+':'+s.k};
+        await W(200); }
+      if(!ok) return {err:'30 秒内没走到「'+((S[s.st]||{}).name||s.st)+'」的选项板，演练停在 '+(DRILL.path.map(p=>p.st).join(' → ')||'入口')}; }
+    return {log}; })()`);
+  if(!res||res.err){ console.error('演练没走通：'+(res?res.err:'页面没回应')); quit(1); }
+  console.log('演练：'+res.log.join(' → ')); await sl(2600); }
 stage='摆到要截的样子';
 const J=JSON.stringify, steps=[]; if(o.view) steps.push(`(document.querySelector('[data-view="${o.view}"]')||{click(){}}).click()`);
 if(o.sample) steps.push(`playFrom(${J(o.sample)})`);
-if(!o.hash||o.view||o.sample||o.beat!=null||o.station||o.focus||o.fit) steps.push('stop()');
+if(!DR&&(!o.hash||o.view||o.sample||o.beat!=null||o.station||o.focus||o.fit)) steps.push('stop()');
 if(o.beat!=null) steps.push(`setBeat(${+o.beat},false)`);
 if(o.station) steps.push(`selectStation(${J(o.station)})`);
 if(o.focus) steps.push(`st.follow=false;centerOn(N[${J(o.focus)}].x,N[${J(o.focus)}].y,${+(o.zoom||1)},0)`);
@@ -73,7 +94,7 @@ else if(o.station) steps.push(`st.follow=false;centerOn(N[${J(o.station)}].x,N[$
 else if(o.fit) steps.push('st.follow=false;fit(false)');
 else if(o.beat!=null) steps.push('st.follow=false;centerOn(TK.x,TK.y,null,0)');   // 跳拍后镜头对准货，免得货在画面外
 steps.push("document.getElementById('toast').classList.remove('on')");
-await ev(steps.join(';')); await sl(o.view||o.beat!=null||o.hash?2200:900);   // 切视图 / 跳拍后货要滑到新位置（最长约 2.1 秒），等它停稳再截
+await ev(steps.join(';')); await sl(DR?300:o.view||o.beat!=null||o.hash?2200:900);   // 切视图 / 跳拍后货要滑到新位置（最长约 2.1 秒），等它停稳再截
 if(o.beat!=null&&!o.focus&&!o.station&&!o.fit) await ev('centerOn(TK.x,TK.y,null,0)');
 stage='读自检';
 const r=await ev(`({self:document.documentElement.dataset.selfcheck,fail:(window.__selfcheck||[]).filter(x=>!x.pass).map(x=>x.n+'：'+x.why),stations:Object.keys(S).length,edges:EDGES.length,samples:SAMPLES.length,skin:document.documentElement.dataset.skin||document.documentElement.dataset.theme||'auto',calm:document.documentElement.hasAttribute('data-calm'),overflowX:document.documentElement.scrollWidth-innerWidth})`);
